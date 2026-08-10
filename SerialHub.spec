@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['C:\\ht\\scripts\\serial_hub\\launcher.py'],
-    pathex=['C:\\ht\\scripts'],
+    ['C:\\project\\serial_hub\\launcher.py'],
+    pathex=['C:\\project'],
     binaries=[],
-    datas=[('C:\\ht\\scripts\\serial_hub\\docs\\SerialHub_사용설명서.html', 'docs')],
+    datas=[('C:\\project\\serial_hub\\docs\\SerialHub_사용설명서.html', 'docs'), ('C:\\project\\serial_hub\\docs\\SerialHub_UserGuide_en.html', 'docs')],
     hiddenimports=['serial.tools.list_ports', 'serial.tools.list_ports_windows'],
     hookspath=[],
     hooksconfig={},
@@ -32,7 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\ht\\scripts\\serial_hub\\assets\\serialhub.ico'],
+    icon=['C:\\project\\serial_hub\\assets\\serialhub.ico'],
 )
 coll = COLLECT(
     exe,

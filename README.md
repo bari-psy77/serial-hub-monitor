@@ -9,7 +9,7 @@ ever stopping reception**.
 
 ## Installation (recommended)
 
-Run `dist/SerialHub_Setup_1.2.1.exe` to start the setup wizard. No Python required,
+Run `dist/SerialHub_Setup_1.3.0.exe` to start the setup wizard. No Python required,
 and **no administrator rights required** (per-user install is the default).
 
 Wizard steps: language → notes → install location → Start Menu → **log location** →
@@ -26,7 +26,7 @@ extra icons → summary → install → finish (with optional install check and 
 Unattended deployment:
 
 ```
-SerialHub_Setup_1.2.1.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
+SerialHub_Setup_1.3.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
 unins000.exe /VERYSILENT /SUPPRESSMSGBOXES          # uninstall (settings are kept)
 ```
 

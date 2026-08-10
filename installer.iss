@@ -8,7 +8,7 @@
 ; 막히지 않는 것이 벤치 툴에는 더 중요하다. 설치 시작 시 "모든 사용자" 를 고를 수도 있다.
 
 #define AppName "Serial Hub"
-#define AppVersion "1.2.1"
+#define AppVersion "1.3.0"
 #define AppPublisher "bari-psy77"
 #define AppExe "SerialHub.exe"
 

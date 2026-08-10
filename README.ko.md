@@ -8,7 +8,7 @@ VS Code Serial Monitor + Tera Term + MobaXterm 세 툴을 하나로 대체한다
 
 ## 설치 (권장)
 
-`dist/SerialHub_Setup_1.2.1.exe` 를 실행하면 설치 마법사가 뜬다. Python 을 깔
+`dist/SerialHub_Setup_1.3.0.exe` 를 실행하면 설치 마법사가 뜬다. Python 을 깔
 필요가 없고, **관리자 권한도 필요 없다**(기본이 사용자 단위 설치).
 
 마법사 단계: 언어 → 안내 → 설치 위치 → 시작 메뉴 → **로그 저장 위치** →
@@ -23,7 +23,7 @@ VS Code Serial Monitor + Tera Term + MobaXterm 세 툴을 하나로 대체한다
 무인 배포:
 
 ```
-SerialHub_Setup_1.2.1.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
+SerialHub_Setup_1.3.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
 unins000.exe /VERYSILENT /SUPPRESSMSGBOXES          # 제거 (설정은 보존)
 ```
 
