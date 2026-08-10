@@ -3,10 +3,14 @@
 
   python make_docs.py
 
-산출물: docs/SerialHub_사용설명서.html  (이미지 base64 내장 — 파일 하나만 옮기면 된다)
+산출물 (이미지 base64 내장 — 파일 하나만 옮기면 된다):
+  docs/SerialHub_사용설명서.html     한국어판
+  docs/SerialHub_UserGuide_en.html   영어판 (도움말 F1 이 언어 설정에 맞는 쪽을 연다)
 
 캡처는 uitest.py 의 가상 DUT(3콘솔 에뮬레이터)를 재사용한다 — 실제 장비 없이도
 화면에 진짜 로그가 흐르는 상태를 만들 수 있고, 문서와 코드가 같이 늙지 않는다.
+캡처 이미지는 두 판이 공유한다 (영어판에 한국어 UI 캡처가 실리는 것은 감수 —
+캡션·본문은 각 언어로 쓴다).
 """
 
 from __future__ import annotations
@@ -33,7 +37,8 @@ os.environ["QT_QPA_PLATFORM"] = "windows"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOCS = os.path.join(HERE, "docs")
-OUT = os.path.join(DOCS, "SerialHub_사용설명서.html")
+OUT_KO = os.path.join(DOCS, "SerialHub_사용설명서.html")
+OUT_EN = os.path.join(DOCS, "SerialHub_UserGuide_en.html")
 
 from . import __version__  # noqa: E402
 from .core import config as config_mod  # noqa: E402
@@ -69,11 +74,16 @@ def build_screens() -> None:  # noqa: PLR0915
 
     from PySide6.QtWidgets import QApplication
 
+    from .core import i18n
     from .core.config import Profile
     from .core.filters import FilterRule
     from .ui import theme
     from .ui.main_window import MainWindow
     from .uitest import VCOM_MLOG, VCOM_SHELL, VCOM_UCLI, VirtualDut, spin, wait_for
+
+    # 캡처 이미지는 한/영 두 설명서가 공유한다. 기본 언어가 영어로 바뀌었지만
+    # 캡처는 종전대로 한국어 UI 로 찍는다 — 영어판 본문·캡션은 각자 번역돼 있다.
+    i18n.set_language("ko")
 
     # 화면에 찍히는 경로가 문서에서 읽히도록 짧고 대표적인 위치를 쓴다 (끝나면 지운다)
     tmp = os.path.join(tempfile.gettempdir(), "SerialHub_docs")
@@ -200,30 +210,42 @@ def build_screens() -> None:  # noqa: PLR0915
     shutil.rmtree(tmp, ignore_errors=True)
 
 
-SECTIONS: list[tuple[str, str]] = []
+# 각 원소 = {"ko": (제목, 본문), "en": (title, body)} — 한/영이 나란히 있어야
+# 내용을 고칠 때 한쪽만 고치고 다른 쪽을 잊는 일이 없다.
+SECTIONS: list[dict[str, tuple[str, str]]] = []
 
 
-def section(title: str, body: str) -> None:
-    SECTIONS.append((title, body))
+def section(title_ko: str, body_ko: str, title_en: str, body_en: str) -> None:
+    SECTIONS.append({"ko": (title_ko, body_ko), "en": (title_en, body_en)})
 
 
-def build_html() -> str:
+PAGE_TEXT = {
+    "ko": {"title": "Serial Hub 사용 설명서",
+           "subtitle": f"포트 통합 시리얼 모니터 · v{__version__} · {{date}} 기준"},
+    "en": {"title": "Serial Hub User Guide",
+           "subtitle": f"Unified serial monitor · v{__version__} · as of {{date}}"},
+}
+
+
+def build_html(lang: str) -> str:
     nav = "\n".join(
-        f'<li><a href="#s{index}">{html.escape(title)}</a></li>'
-        for index, (title, _body) in enumerate(SECTIONS))
+        f'<li><a href="#s{index}">{html.escape(entry[lang][0])}</a></li>'
+        for index, entry in enumerate(SECTIONS))
     blocks = "\n".join(
-        f'<section id="s{index}"><h2>{html.escape(title)}</h2>{body}</section>'
-        for index, (title, body) in enumerate(SECTIONS))
+        f'<section id="s{index}"><h2>{html.escape(entry[lang][0])}</h2>{entry[lang][1]}</section>'
+        for index, entry in enumerate(SECTIONS))
     icon = ""
     icon_path = os.path.join(HERE, "assets", "serialhub_64.png")
     if os.path.exists(icon_path):
         with open(icon_path, "rb") as fh:
             icon = ('<img class="logo" src="data:image/png;base64,'
                     + base64.b64encode(fh.read()).decode("ascii") + '" alt="">')
+    title = PAGE_TEXT[lang]["title"]
+    subtitle = PAGE_TEXT[lang]["subtitle"].format(date=time.strftime("%Y-%m-%d"))
     return f"""<!doctype html>
-<html lang="ko"><head><meta charset="utf-8">
+<html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Serial Hub 사용 설명서</title>
+<title>{title}</title>
 <style>
 :root {{ --bg:#F2F4F6; --card:#fff; --line:#E5E8EB; --text:#191F28; --sub:#8B95A1;
          --primary:#3182F6; --ok:#00C471; --warn:#FFB331; --danger:#F04452; }}
@@ -267,8 +289,8 @@ pre code {{ background:none; border:none; color:inherit; padding:0; }}
 ul {{ padding-left:22px; }} li {{ margin:5px 0; }}
 @media (max-width:900px) {{ .wrap {{ flex-direction:column; }} nav {{ width:auto; position:static; }} }}
 </style></head><body>
-<header><h1>{icon}Serial Hub 사용 설명서</h1>
-<p>포트 통합 시리얼 모니터 · v{__version__} · {time.strftime('%Y-%m-%d')} 기준</p></header>
+<header><h1>{icon}{title}</h1>
+<p>{subtitle}</p></header>
 <div class="wrap"><nav><ol>{nav}</ol></nav><main>{blocks}</main></div>
 </body></html>
 """
@@ -287,6 +309,23 @@ def compose() -> None:
 <li><b>필터드뷰</b> — 원하는 패턴만 별도 창으로, 여러 개 동시에</li>
 <li><b>명령 전송</b> — 어느 포트로든 명령을 보내고 응답을 같은 화면에서 확인</li>
 <li><b>비밀값 마스킹</b> — Wi-Fi PSK·networkkey 는 화면·파일·프로파일에서 자동으로 가려진다</li>
+</ul>""",
+            "What this tool is", f"""
+<p>The target device has three serial consoles — <b>User CLI</b>, <b>Matter log</b> and
+<b>Matter shell</b>. Until now that meant running three tools side by side
+(VS Code Serial Monitor + Tera Term + MobaXterm), and ① you could not see all three on one
+screen, ② you could not filter for just the values you cared about, and ③ saving a log
+meant stopping reception. Serial Hub replaces all three.</p>
+{img('monitor', 'Main window — all three consoles on one screen (MLOG left, SHELL top right, UCLI bottom right)')}
+<ul>
+<li><b>3 ports at once</b> — each port gets its own color and prefix; a merged view can
+interleave them in time order</li>
+<li><b>Non-stop saving</b> — recording never interrupts reception; there is no
+"stop receiving to save" step</li>
+<li><b>Filtered views</b> — only the patterns you want, in separate windows, several at once</li>
+<li><b>Command sending</b> — send a command to any port and see the reply on the same screen</li>
+<li><b>Secret masking</b> — the Wi-Fi PSK and networkkey are hidden automatically in the view,
+the files and the profile</li>
 </ul>""")
 
     section("설치와 첫 실행", f"""
@@ -322,6 +361,46 @@ def compose() -> None:
 <li><b>[전체 연결]</b> 을 누르면 설정 창이 닫히고 수신이 시작된다.</li>
 <li>파일로 남기려면 <b>[⏺ 로그 시작]</b> 을 누른다 — 저장 위치·파일명을 확인하는 창이 먼저 뜬다.</li>
 <li><b>[💾 프로파일]</b> 에서 저장하면 다음부터 그대로 뜬다 (포트 이름·로그명 포함).</li>
+</ol>""",
+            "Installation and first run", f"""
+<h3>Install</h3>
+<p>Run <code>SerialHub_Setup_{__version__}.exe</code>. No Python required, and
+<b>no administrator rights required</b> (per-user install is the default).</p>
+<p>Wizard steps: language → notes → install location → Start Menu → <b>log location</b> →
+extra icons → summary → install → finish.</p>
+<p>For a no-install setup, unzip <code>SerialHub_&lt;date&gt;.zip</code> and run
+<code>SerialHub.exe</code>. To carry the settings along in the folder on a USB stick,
+create an empty <code>portable.txt</code> next to the exe.</p>
+<div class="note"><b>On a new PC, run <code>--selfcheck</code> first.</b>
+The Start Menu entry "installation check" does the same thing. A windowed program has no
+console, so problems get buried silently — this check actually exercises COM port
+enumeration, the display library and the writable paths.</div>
+<h3>Screen layout</h3>
+<p>The main window is <b>a single monitor</b>. There are no tabs — settings live in a
+<b>modal settings dialog</b> opened from the icons on the second row.</p>
+<table><tr><th>Icon</th><th>Opens</th></tr>
+<tr><td>🔌 Connect</td><td>Settings → Connection (ports, baud, names, probe)</td></tr>
+<tr><td>⚙ Settings</td><td>The settings dialog (last page viewed)</td></tr>
+<tr><td>🎨 Rules</td><td>Settings → Rules (highlight, redact, triggers, saved filters)</td></tr>
+<tr><td>📁 Log</td><td>Settings → Log (folder, file names, rotation)</td></tr>
+<tr><td>💾 Profile</td><td>Settings → Profile (save, load)</td></tr>
+<tr><td>🔎 Filtered view</td><td>A new filtered view window (<kbd>Ctrl</kbd>+<kbd>K</kbd>)</td></tr>
+<tr><td>❓ Help</td><td>This document (<kbd>F1</kbd>)</td></tr></table>
+<h3>Connecting for the first time</h3>
+<ol>
+<li>Press <b>[🔌 Connect]</b>, then pick the number of UARTs this model has (1/2/3) in
+<b>[Consoles on this device]</b> at the top.</li>
+<li>Pick the COM port and baud rate (default 115200) on each port card. If the COM list is
+stale, refresh it with <b>[↻]</b>.</li>
+<li>If you don't know which COM is which console, press <b>[Probe all]</b> — after the
+verdict, a mapping is suggested.</li>
+<li>Use the name button to pick <b>MLOG / SHELL / UCLI / port number / custom</b>. Without a
+name, the COM number is used as-is.</li>
+<li>Press <b>[Connect all]</b> — the settings dialog closes and reception starts.</li>
+<li>To write files, press <b>[⏺ Start log]</b> — a dialog confirming the location and file
+names appears first.</li>
+<li>Save with <b>[💾 Profile]</b> and the app opens exactly like this next time (port names
+and log names included).</li>
 </ol>""")
 
     section("설정 › 연결 — 포트 지정과 probe", f"""
@@ -354,7 +433,45 @@ def compose() -> None:
 명령 대상 목록, 로그 prefix 에 함께 반영되고 프로파일에 저장된다.</p>
 <h3>포트가 안 열릴 때</h3>
 <p>COM 은 한 프로그램만 잡을 수 있다. 실패하면 카드에 점유 후보 프로세스를 보여준다 —
-Tera Term / VS Code Serial Monitor / 예전 <code>run_*.py</code> 를 닫고 다시 [Connect].</p>""")
+Tera Term / VS Code Serial Monitor / 예전 <code>run_*.py</code> 를 닫고 다시 [Connect].</p>""",
+            "Settings › Connection — ports and probing", f"""
+{img('connection', 'Settings > Connection — three port cards (port, baud, name, probe)')}
+<h3>What probing does</h3>
+<p>COM numbers differ per bench (the same device can be COM4=shell on one bench and
+COM4=log on another). So this tool never hardcodes COM numbers — it identifies the role
+with a <b>probe</b> instead.</p>
+<div class="note"><b>Probing never sends a real command.</b> It sends one token that exists
+on no console and tells the roles apart by the shape of each console's <i>unknown command</i>
+reply (<code>Error &lt;command&gt;:</code> → Matter shell, <code>Invalid command</code> →
+User CLI, no reply + unsolicited traffic → the log port). There is no risk of a stray
+command running on a mis-assigned port.</div>
+<p>If the <b>[Probe all]</b> verdict differs from the current mapping, a suggestion appears
+at the bottom; press <b>[Apply suggestion]</b> to take it (nothing changes automatically).
+Applying requires all ports to be disconnected.</p>
+<h3>Console count — models with 1 or 2 UARTs</h3>
+<p>Devices differ in how many serial consoles they have. Always showing three would waste
+screen space, so pick <b>the number of consoles this device uses</b> at the top of the
+Connection page.</p>
+<table><tr><th>Choice</th><th>Main window</th></tr>
+<tr><td>1</td><td>One console fills the window</td></tr>
+<tr><td>2</td><td>Side-by-side split</td></tr>
+<tr><td>3</td><td>1 left + 2 right (default)</td></tr></table>
+<p>For a combination that isn't "the first N" (e.g. MLOG + UCLI), use the
+<b>[Use this port]</b> checkbox on each card. A disabled port disappears from the view,
+the status pills, the <b>command targets</b>, the log files and the bottom counters, and
+gets disconnected.</p>
+<div class="note"><b>Nothing is lost.</b> A disabled port keeps its COM, baud and name, and
+re-enabling it even restores the scrollback received so far. The choice is <b>saved in the
+profile</b>, so make one profile per model and it opens with the right count immediately.</div>
+<h3>Renaming ports</h3>
+<p>The name button on each card offers <b>MLOG / SHELL / UCLI / use port number /
+custom…</b>. If your device has a different console layout, just type the name you want.
+The name shows up in console titles, the status pills, the command target list and the log
+prefixes, and is saved in the profile.</p>
+<h3>When a port won't open</h3>
+<p>A COM port belongs to one program. On failure the card shows candidate holding
+processes — close Tera Term / VS Code Serial Monitor / an old <code>run_*.py</code> and
+press [Connect] again.</p>""")
 
     section("로그 저장", f"""
 <h3>기록은 눌러야 시작된다</h3>
@@ -400,7 +517,64 @@ Tera Term / VS Code Serial Monitor / 예전 <code>run_*.py</code> 를 닫고 다
 </ul>
 <div class="warn"><b>제어문자 처리</b> — 장치가 보낸 NUL(0x00) 등이 그대로 들어가면 편집기가
 파일 전체를 바이너리로 보고 열기를 거부한다. 그래서 <code>&lt;00&gt;</code> 표기로 바꿔 기록한다.
-흔적은 남기되 파일은 텍스트로 유지한다.</div>""")
+흔적은 남기되 파일은 텍스트로 유지한다.</div>""",
+            "Saving logs", f"""
+<h3>Recording starts on demand</h3>
+<div class="note"><b>Connecting alone creates no files.</b> Press <b>[⏺ Start log]</b> and a
+dialog confirming the location and file names appears first; lines go to file only after
+you press [Start recording]. The dialog appears <b>every time</b> — whether you restarted
+the app or never touched the settings, you always see with your own eyes where this
+recording goes and what it is called. Close the files at any time with
+<b>[⏹ Stop log]</b>.</div>
+<p>Once started, per-port files and a time-ordered merged file are written
+<b>simultaneously</b>.</p>
+<pre><code>&lt;log folder&gt;\\&lt;MMDD&gt;\\&lt;session&gt;_mlog.log    [2026-08-04 03:19:12.165] &lt;text&gt;
+&lt;log folder&gt;\\&lt;MMDD&gt;\\&lt;session&gt;_shell.log
+&lt;log folder&gt;\\&lt;MMDD&gt;\\&lt;session&gt;_ucli.log
+&lt;log folder&gt;\\&lt;MMDD&gt;\\&lt;session&gt;_all.log     [03:19:12 + 123.4s] [MLOG] &lt;text&gt;</code></pre>
+<p>Per-port files match your existing Tera Term / VS Code saved logs; the merged file
+matches the existing <code>run_*.py</code> transcripts — the greps you already use keep
+working.</p>
+<h3>Pausing / resuming recording</h3>
+{img('paused', 'While recording is paused the REC indicator turns yellow — reception and the view continue')}
+<p><kbd>Ctrl</kbd>+<kbd>P</kbd> or <b>⏸ Pause</b>. Only <b>file writing</b> stops; the view
+and reception continue. Use it to keep only the stretch you need. The paused stretch is
+marked in each port file like this:</p>
+<pre><code>!! recording paused — nothing between here and the resume marker is in this file
+!! recording resumed — 1,234 line(s) during the pause are not in this file</code></pre>
+<p>So a gap in the timestamps explains itself when someone opens just the file later.</p>
+<h3>Changing the location and file names</h3>
+{img('logsetting', 'Settings > Log — folder, session prefix, per-port log names, merged file name, rotation size')}
+<p>Under <b>[📁 Log]</b>, set the <b>log folder</b>, the <b>session prefix</b>, the per-port
+<b>log names</b>, the <b>merged (all) file name</b>, whether to <b>include the session
+prefix</b>, and the <b>rotation size</b>. A preview of the resulting file names updates as
+you type.</p>
+<div class="note"><b>Nothing applies until you press [OK].</b> Applying as you type would
+create a file for every keystroke. Cancel restores the previous values.</div>
+<div class="note"><b>No empty files.</b> A log file is created only when <b>the first line
+actually arrives</b> on that port. Quiet ports never produce a file. While recording, the
+files are <b>synced to disk every 2 seconds</b>, so other editors and <code>tail</code> see
+the latest content immediately.</div>
+<div class="note"><b>Changes apply immediately even while recording.</b> The files are
+closed at that moment and reopened at the new location with the new names. Files already
+written stay where they were (the app never moves evidence). The status line says
+"writing to &lt;new path&gt; from now on (earlier files stay in &lt;old path&gt;)".</div>
+<h3>File management</h3>
+<ul>
+<li><b>Session split</b> (<kbd>Ctrl</kbd>+<kbd>N</kbd>) — start a new file from now on while
+staying connected. For attaching only a small file to a ticket</li>
+<li><b>Size rotation</b> — the merged file splits into <code>_p2</code>, <code>_p3</code> …
+past 200 MB</li>
+<li><b>Midnight rollover</b> — when the date changes, recording moves to the new date folder
+(no interruption)</li>
+<li><b>Open log file</b> (File menu) — lists the files being written with their sizes,
+flushing on open</li>
+<li><b>Save a copy</b> — copies everything so far to another folder while recording
+continues (for attachments)</li>
+</ul>
+<div class="warn"><b>Control characters</b> — a raw NUL (0x00) from the device makes editors
+treat the whole file as binary and refuse to open it. So it is written as
+<code>&lt;00&gt;</code> instead — the trace is kept and the file stays text.</div>""")
 
     section("보기 — 레이아웃·색·검색", f"""
 <h3>레이아웃 4종</h3>
@@ -420,7 +594,33 @@ Tera Term / VS Code Serial Monitor / 예전 <code>run_*.py</code> 를 닫고 다
 <tr><td><code>🗑</code></td><td>이 콘솔 화면만 지우기 — ring·파일은 유지</td></tr>
 <tr><td><code>⧉</code></td><td>별도 창으로 분리 (<kbd>Ctrl</kbd>+<kbd>D</kbd>)</td></tr></table>
 <h3>창 분리 — 멀티 모니터</h3>
-{img('popout', '콘솔을 별도 창으로 빼면 다른 모니터에 크게 띄울 수 있다. 창을 닫으면 원래 자리로 복귀')}""")
+{img('popout', '콘솔을 별도 창으로 빼면 다른 모니터에 크게 띄울 수 있다. 창을 닫으면 원래 자리로 복귀')}""",
+            "Viewing — layouts, colors, search", f"""
+<h3>Four layouts</h3>
+<p>Pick one in the <b>View</b> menu: 1 left + 2 right (default) / 3 columns / tabs /
+<b>merged view</b>. Split ratios and the window size are saved in the profile and restored
+on the next run.</p>
+{img('merged', 'Merged view — all 3 ports in time order on one screen, prefixes tell them apart')}
+<h3>Firmware log colors</h3>
+<p>ANSI colors sent by the device are rendered on screen as-is (turn off via View → Show
+firmware log colors). <b>Color codes never go into the log files</b> — greps and
+attachments get clean text.</p>
+<h3>Console header buttons</h3>
+<table><tr><th>Button</th><th>Function</th></tr>
+<tr><td><code>time</code></td><td>Timestamps: absolute → relative → off
+(<kbd>Ctrl</kbd>+<kbd>T</kbd>)</td></tr>
+<tr><td><code>∅</code></td><td>Hide blank lines — filters the runs of empty lines the
+firmware emits</td></tr>
+<tr><td><code>⏸</code></td><td>Scroll lock (reception and recording continue). New lines
+show as "↓ N new"</td></tr>
+<tr><td><code>🔍</code></td><td>Search (<kbd>Ctrl</kbd>+<kbd>F</kbd>), <kbd>F3</kbd> to step.
+Click the box to pick from <b>recent search terms</b>, which survive restarts</td></tr>
+<tr><td><code>🗑</code></td><td>Clear this console's view only — the ring buffer and files
+are kept</td></tr>
+<tr><td><code>⧉</code></td><td>Pop out into its own window
+(<kbd>Ctrl</kbd>+<kbd>D</kbd>)</td></tr></table>
+<h3>Pop-out windows — multiple monitors</h3>
+{img('popout', 'A popped-out console can go full-size on another monitor. Closing the window docks it back')}""")
 
     section("필터드뷰 — 원하는 것만 보기", f"""
 {img('filterview', '필터드뷰 — 매치되는 라인만 모아서 별도 창으로')}
@@ -432,6 +632,20 @@ Tera Term / VS Code Serial Monitor / 예전 <code>run_*.py</code> 를 닫고 다
 <li><b>소급 채움</b> — 이미 받은 라인 중 매치되는 것도 채워준다</li>
 <li><b>파일로 저장</b> — 지금 보이는 결과만 텍스트로 (티켓 첨부용)</li>
 <li>자주 쓰는 필터는 [설정 → 규칙 → 저장된 필터] 에 두고 원클릭으로 재생성</li>
+</ul>""",
+            "Filtered views — see only what you need", f"""
+{img('filterview', 'A filtered view — only the matching lines, in a separate window')}
+<p>Open with <kbd>Ctrl</kbd>+<kbd>K</kbd> or the <b>Filter</b> menu. Several can be open at
+once, each window with its own criteria.</p>
+<ul>
+<li>Substring match by default; turn on <code>.*</code> for regex. <code>Aa</code> matches
+case</li>
+<li>Pick target ports to watch a specific console only</li>
+<li><b>Backfill</b> — also fills in matching lines that arrived earlier</li>
+<li><b>Save to file</b> — just the results currently shown, as text (for ticket
+attachments)</li>
+<li>Keep frequent filters under [Settings → Rules → Saved filters] and recreate them with
+one click</li>
 </ul>""")
 
     section("설정 › 규칙 — 하이라이트·마스킹·트리거", f"""
@@ -454,7 +668,32 @@ Tera Term / VS Code Serial Monitor / 예전 <code>run_*.py</code> 를 닫고 다
 <h3>트리거 — 밤샘 수집용 집계</h3>
 <p><code>WDOG</code> / <code>MemManage</code> / <code>HardFault</code> 가 기본 감시 대상이다.
 발생 <b>횟수와 최근 시각</b>을 상단 <b>⚡</b> 칩에 집계한다 — 새벽에 지나간 이벤트를
-아침에 확인할 수 있다. 하이라이트(눈에 띄게)와 다른 '세는' 채널이다.</p>""")
+아침에 확인할 수 있다. 하이라이트(눈에 띄게)와 다른 '세는' 채널이다.</p>""",
+            "Settings › Rules — highlighting, masking, triggers", f"""
+{img('rules', 'Settings > Rules — the tree on the left: highlight / redact / triggers / saved filters')}
+<p>Pick one of <b>highlight / redact / triggers / saved filters</b> in the subtree on the
+left. Not piling everything onto one page keeps the tables from getting cut off.</p>
+<h3>Highlight rules</h3>
+<p>Colors keywords. <b>The color cell and the keyword cell are painted in the actual
+color</b>, so you see immediately how it will look in the log. Applies to the live stream
+at once.</p>
+<h3>redact rules — masking secrets</h3>
+<p>The PSK in <code>wifi connect &lt;ssid&gt; &lt;psk&gt;</code>, Thread
+<code>networkkey</code> and <code>pskc</code> are masked by the default rules. To catch
+keys even when the keyword is cut off at a line boundary, <b>runs of 32+ hex
+characters</b> are masked purely by shape too.</p>
+<div class="note"><b>Masking applies to the view, the log files and the profile JSON alike;
+only what goes out over the serial line is unmasked.</b> Profiles are meant to be copied
+and shared between benches, so command history and the scratchpad are masked on save as
+well. Attach a log to a ticket as-is and no secret leaks.</div>
+<div class="warn">Limitation — redact is applied per stored line. In the rare case where a
+value is split across a line boundary, the first fragment may already be on disk. Skim
+around <code>wifi connect</code> before attaching a log externally.</div>
+<h3>Triggers — tallies for overnight captures</h3>
+<p><code>WDOG</code> / <code>MemManage</code> / <code>HardFault</code> are watched by
+default. The <b>hit count and last-seen time</b> are tallied into the <b>⚡</b> chip at the
+top — so you can check in the morning what flew by at 3 AM. A 'counting' channel, separate
+from highlighting (which makes lines stand out).</p>""")
 
     section("명령 보내기", f"""
 {img('command_panel', '명령 패널 — 퀵 입력 + 스크래치패드')}
@@ -469,14 +708,39 @@ Tera Term / VS Code Serial Monitor / 예전 <code>run_*.py</code> 를 닫고 다
 (<kbd>Esc</kbd> 중단). <code>#</code> 로 시작하는 줄은 주석이다</li>
 <li><b>대상 포트 오지정 힌트</b> — 보낸 명령을 그 콘솔이 모른다고 답하면 "대상 포트 확인"
 경고가 뜬다 (SHELL 명령을 UCLI 로 보내는 실수를 즉시 알려준다)</li>
+</ul>""",
+            "Sending commands", f"""
+{img('command_panel', 'The command panel — quick input + scratchpad')}
+<ul>
+<li>Pick the target port, type, press <kbd>Enter</kbd>. <kbd>↑</kbd><kbd>↓</kbd> walks the
+history (kept per port, and <b>it survives restarts</b>)</li>
+<li><b>Every connected port is a valid target.</b> Which console takes input differs per
+device, so even ports that look log-only are not blocked (if a probe can be sent, a
+command can too)</li>
+<li>Sent commands are echoed into the console as <code>&gt;&gt;&gt;</code></li>
+<li><b>Scratchpad</b> — edit and keep your frequent command sets like a file.
+<kbd>Ctrl</kbd>+<kbd>Enter</kbd> sends the current line only; [Send all in order] sends
+from the top (<kbd>Esc</kbd> stops). Lines starting with <code>#</code> are comments</li>
+<li><b>Wrong-target hint</b> — if the console replies that it does not know the command you
+sent, a "check the target port" warning appears (catches sending a SHELL command to UCLI
+immediately)</li>
 </ul>""")
 
     section("언어 — 한국어 / English", """
-<p>기본은 한국어다. <b>[설정 → 일반]</b> 에서 English 로 바꿀 수 있다.</p>
+<p>기본은 English 다. <b>[설정 → 일반]</b> 에서 한국어로 바꿀 수 있다.</p>
 <ul>
 <li>언어는 프로파일이 아니라 <b>사람 설정</b>이라, 프로파일을 바꿔도 따라온다</li>
 <li><b>다음에 프로그램을 켤 때부터</b> 적용된다</li>
 <li>번역이 없는 문구는 한국어로 나온다 (빈 화면이 되지 않게)</li>
+</ul>""",
+            "Language — 한국어 / English", """
+<p>The default is English. You can switch to 한국어 (Korean) in
+<b>[Settings → General]</b>.</p>
+<ul>
+<li>The language is a <b>per-person setting</b>, not a profile setting — it follows you
+across profiles</li>
+<li>It takes effect <b>the next time you start the program</b></li>
+<li>Text without a translation is shown in Korean (never a blank screen)</li>
 </ul>""")
 
     section("자동화 브리지 — 스크립트 연동", """
@@ -496,7 +760,25 @@ python hub_client.py send SHELL "otcli state"
 python hub_client.py marker "### T1 시작"
 python hub_client.py tail MLOG</code></pre>
 <p>포트는 프로파일의 <code>bridge_port</code> 로 바꾸거나 <code>0</code> 으로 끌 수 있다.
-127.0.0.1 에만 열리므로 외부에서는 접근할 수 없다.</p>""")
+127.0.0.1 에만 열리므로 외부에서는 접근할 수 없다.</p>""",
+            "Automation bridge — script integration", """
+<p>A COM port belongs to one program. With Serial Hub running, existing automation like
+<code>serport.py</code>, <code>run_*.py</code> or <code>otcli_dut.py</code> cannot open the
+ports. So Serial Hub opens a service window on <code>127.0.0.1:3341</code> — scripts go
+through Serial Hub instead of the port.</p>
+<pre><code>from serial_hub.hub_client import HubClient
+
+with HubClient() as hub:
+    print(hub.status()["roles"])              # {'MLOG': 'connected', ...}
+    print(hub.command("SHELL", "otcli state"))  # ['&gt; otcli state', 'leader', 'Done']
+    hub.marker("### T1 cycle 3 start")         # insert a separator into the log</code></pre>
+<p>There is a CLI too:</p>
+<pre><code>python hub_client.py status
+python hub_client.py send SHELL "otcli state"
+python hub_client.py marker "### T1 start"
+python hub_client.py tail MLOG</code></pre>
+<p>Change the port via the profile's <code>bridge_port</code>, or set <code>0</code> to turn
+it off. It listens on 127.0.0.1 only, so it is unreachable from outside.</p>""")
 
     section("문제가 생기면", """
 <h3>진단 로그</h3>
@@ -523,6 +805,34 @@ python hub_client.py tail MLOG</code></pre>
 <tr><td>설정·프로파일·app.log</td><td><code>%LOCALAPPDATA%\\SerialHub</code>
 (포터블 모드면 exe 옆)</td></tr>
 <tr><td>수집한 로그</td><td>설치할 때 고른 폴더 ([설정 → 로그 설정] 에서 변경 가능)</td></tr>
+</table>""",
+            "Troubleshooting", """
+<h3>Diagnostic log</h3>
+<p>The app records its own behavior (connects/reconnects/probe verdicts/write
+failures/exceptions) in <code>app.log</code> (1 MB × 3 rotation). Open the folder with
+<b>Help → Open diagnostics folder</b> and hand over <code>app.log</code> and
+<code>crash.log</code> as-is for post-mortem analysis.</p>
+<h3>Common issues</h3>
+<table>
+<tr><th>Symptom</th><th>Cause / action</th></tr>
+<tr><td>A port won't open</td><td>Another program is holding the COM port. Close the
+candidate holders shown on the card and press [Connect] again</td></tr>
+<tr><td>A log file won't open in an editor</td><td>A file made by an old version contains a
+raw NUL. The current version writes it as <code>&lt;00&gt;</code></td></tr>
+<tr><td>Logs pile up in the old location</td><td>An old-version problem. The current version
+switches to the new folder immediately, even mid-recording</td></tr>
+<tr><td>Probe says "undetermined"</td><td>The firmware's reply wording may have changed.
+Check the probe patterns in the profile (fixable without a rebuild)</td></tr>
+<tr><td>The view shows "⋯ N lines omitted"</td><td>The display fell behind reception for a
+stretch. <b>The log files have everything</b></td></tr>
+</table>
+<h3>Where things are stored</h3>
+<table>
+<tr><th>What</th><th>Where</th></tr>
+<tr><td>Settings, profiles, app.log</td><td><code>%LOCALAPPDATA%\\SerialHub</code>
+(next to the exe in portable mode)</td></tr>
+<tr><td>Captured logs</td><td>The folder chosen at install time (changeable in
+[Settings → Log])</td></tr>
 </table>""")
 
     section("단축키", """
@@ -545,6 +855,28 @@ python hub_client.py tail MLOG</code></pre>
 <tr><td><kbd>Ctrl</kbd>+<kbd>=</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>글자 크기</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>프로파일 저장</td></tr>
 <tr><td><kbd>F1</kbd></td><td>이 사용 설명서</td></tr></table>
+<p style="margin-top:22px;color:#8b95a1;font-size:13px">Serial Hub · Copyright © psy-bari</p>""",
+            "Keyboard shortcuts", """
+<table><tr><th>Key</th><th>Function</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd> / <kbd>F3</kbd></td><td>Search / next match</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>New filtered view</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>Focus console</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>`</kbd></td><td>Command input</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Tab</kbd></td><td>Cycle command target port</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>T</kbd></td><td>Timestamp mode</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Space</kbd></td><td>Scroll lock on / off</td></tr>
+<tr><td><kbd>Enter</kbd></td><td>(in a console) release scroll lock — jump to the
+bottom</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></td>
+<td>Clear view / all views + buffer</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd></td><td>Insert marker</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Split into a new log file</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Start / stop log recording</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Pause / resume recording</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Pop console out / dock back</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>=</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>Text size</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save profile</td></tr>
+<tr><td><kbd>F1</kbd></td><td>This user guide</td></tr></table>
 <p style="margin-top:22px;color:#8b95a1;font-size:13px">Serial Hub · Copyright © psy-bari</p>""")
 
 
@@ -553,10 +885,11 @@ def main() -> int:
     print("UI 캡처 중 (가상 DUT)…")
     build_screens()
     compose()
-    with open(OUT, "w", encoding="utf-8") as fh:
-        fh.write(build_html())
-    size = os.path.getsize(OUT) / 1024
-    print(f"\n생성: {OUT}  ({size:,.0f} KB, 이미지 {len(SHOTS)}장 내장)")
+    for lang, out in (("ko", OUT_KO), ("en", OUT_EN)):
+        with open(out, "w", encoding="utf-8") as fh:
+            fh.write(build_html(lang))
+        size = os.path.getsize(out) / 1024
+        print(f"생성: {out}  ({size:,.0f} KB, 이미지 {len(SHOTS)}장 내장)")
     return 0
 
 

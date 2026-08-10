@@ -292,7 +292,7 @@ EN: dict[str, str] = {
     "세션이 시작되지 않았습니다 — start_session() 이 먼저입니다":
         "The session has not started — call start_session() first",
     "사용 설명서 파일을 찾지 못했습니다 (docs\\SerialHub_사용설명서.html)":
-        "Could not find the user guide (docs\\SerialHub_사용설명서.html)",
+        "Could not find the user guide (docs\\SerialHub_UserGuide_en.html)",
     "언어를 바꿨습니다 — 다음에 프로그램을 켤 때부터 적용됩니다.":
         "Language changed — it takes effect the next time you start the program.",
     "바꾸면 다음에 프로그램을 켤 때부터 적용됩니다. 번역이 없는 문구는 한국어로 나옵니다.":
@@ -411,7 +411,8 @@ EN: dict[str, str] = {
     "Serial Hub 설치 점검": "Serial Hub installation check",
     "Serial Hub 오류": "Serial Hub error",
     "Serial Hub 정보": "About Serial Hub",
-    "SerialHub_사용설명서.html": "SerialHub_사용설명서.html",
+    # 파일명이 곧 tr 키 — 영어 모드에서는 영어판 설명서를 연다 (make_docs.py 가 두 판을 만든다)
+    "SerialHub_사용설명서.html": "SerialHub_UserGuide_en.html",
     "<b>Serial Hub</b><br>포트 통합 시리얼 모니터<br><br>버전 {0}":
         "<b>Serial Hub</b><br>Unified serial monitor<br><br>Version {0}",
     "Python {0} · PySide6 {1}\n데이터 폴더: {2}\n\nCopyright © psy-bari":

@@ -53,12 +53,15 @@ def build(onefile: bool, clean: bool) -> int:
         "--hidden-import", "serial.tools.list_ports",
         "--hidden-import", "serial.tools.list_ports_windows",
     ]
-    # 사용 설명서를 exe 옆 docs\ 로 같이 넣는다 — 도움말(F1)이 이걸 연다
-    guide = os.path.join(HERE, "docs", "SerialHub_사용설명서.html")
-    if os.path.exists(guide):
-        cmd += ["--add-data", f"{guide};docs"]
-    else:
-        print("!! 사용 설명서가 없다 — python make_docs.py 를 먼저 돌려라")
+    # 사용 설명서(한/영)를 exe 옆 docs\ 로 같이 넣는다 — 도움말(F1)이 언어 설정에 맞는 쪽을 연다
+    guides = [os.path.join(HERE, "docs", name)
+              for name in ("SerialHub_사용설명서.html", "SerialHub_UserGuide_en.html")]
+    for guide in guides:
+        if os.path.exists(guide):
+            cmd += ["--add-data", f"{guide};docs"]
+        else:
+            print(f"!! 사용 설명서가 없다 ({os.path.basename(guide)}) — "
+                  "python make_docs.py 를 먼저 돌려라")
     icon = os.path.join(HERE, "assets", "serialhub.ico")
     if os.path.exists(icon):
         cmd += ["--icon", icon]
