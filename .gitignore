@@ -1,0 +1,14 @@
+# 빌드 산출물 — build_exe.py / build_installer.py 가 생성
+build/
+dist/
+
+# 파이썬 캐시
+__pycache__/
+.ruff_cache/
+
+# 실행 중 생기는 파일 (로그·점검 결과·사용자 프로파일)
+*.log
+selfcheck.txt
+where.txt
+portable.txt
+profiles/

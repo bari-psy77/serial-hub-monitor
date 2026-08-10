@@ -1,0 +1,1133 @@
+#!/usr/bin/env python3
+"""Serial Hub 셀프테스트 — 하드웨어 없이 core + UI 를 검증한다 (설계문서 §8).
+
+  python selftest.py           # core 만
+  python selftest.py --gui     # offscreen Qt 포함
+
+가짜 시리얼 포트로 라인 조립 / 부분 라인 / 재접속 / 송신 / redact / probe 판정을 돌린다.
+실기 검증(설계 §8 의 2~6)은 이 스크립트로 대체되지 않는다.
+"""
+
+from __future__ import annotations
+
+import argparse
+import itertools
+import os
+import shutil
+import sys
+import tempfile
+import threading
+import time
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:  # noqa: BLE001 - 콘솔이 cp949 여도 테스트는 돌아야 한다
+    pass
+
+if __package__ in (None, ""):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    __package__ = "serial_hub"
+
+from .core import config as config_mod  # noqa: E402
+from .core import portscan  # noqa: E402
+from .core.config import PortConfig, Profile  # noqa: E402
+from .core.filters import (DEFAULT_REDACT_RULES, FilterRule, HighlightRule,  # noqa: E402
+                           RedactRule, Redactor)
+from .core.logstore import (TS_ABSOLUTE, TS_OFF, TS_RELATIVE, LogStore,  # noqa: E402
+                            format_for_merged_file, format_for_port_file, render_line)
+from .core.port import PortReader  # noqa: E402
+from .core.session import SerialHubSession  # noqa: E402
+
+def pump(app) -> None:
+    """processEvents() 는 DeferredDelete 를 처리하지 않는다 (app.exec() 안에서만 돈다).
+    실기와 같은 파괴 시점을 재현하려고 여기서 직접 비운다."""
+    from PySide6.QtCore import QEvent
+    app.processEvents()
+    app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+PASSED: list[str] = []
+FAILED: list[str] = []
+
+
+def check(name: str, condition: bool, detail: str = "") -> None:
+    if condition:
+        PASSED.append(name)
+        print(f"  [PASS] {name}")
+    else:
+        FAILED.append(f"{name} — {detail}")
+        print(f"  [FAIL] {name} — {detail}")
+
+
+class FakeSerial:
+    """pyserial 대역. read() 는 큐에서 꺼내고, fail_after 를 넘기면 예외를 던진다."""
+
+    def __init__(self, script: list[bytes] | None = None, fail_after: int | None = None):
+        self.queue = list(script or [])
+        self.written: list[bytes] = []
+        self.closed = False
+        self.reads = 0
+        self.fail_after = fail_after
+        self._lock = threading.Lock()
+
+    def read(self, _size: int = 1) -> bytes:
+        with self._lock:
+            self.reads += 1
+            if self.fail_after is not None and self.reads > self.fail_after:
+                raise OSError("simulated read failure")
+            if self.queue:
+                return self.queue.pop(0)
+        time.sleep(0.01)
+        return b""
+
+    def feed(self, data: bytes) -> None:
+        with self._lock:
+            self.queue.append(data)
+
+    def write(self, data: bytes) -> int:
+        self.written.append(data)
+        return len(data)
+
+    def flush(self) -> None:
+        pass
+
+    def reset_input_buffer(self) -> None:
+        pass
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def wait_until(predicate, timeout: float = 3.0, interval: float = 0.02) -> bool:
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
+
+
+# --------------------------------------------------------------------- core
+
+def test_logstore(tmp: str) -> None:
+    print("\n== LogStore ==")
+    store = LogStore(capacity_per_port=1_000)
+    store.start_session(tmp, "unit", ["MLOG", "SHELL"])
+
+    store.append("MLOG", "hello world")
+    store.append("SHELL", "otcli state", is_tx=True)
+    store.append("SHELL", "Done")
+
+    lines = store.pull(-1)
+    check("seq 는 전 포트 통합 단조 증가", [ln.seq for ln in lines] == [1, 2, 3], str(lines))
+    check("포트 필터 pull", [ln.text for ln in store.pull(-1, ["SHELL"])] == ["otcli state", "Done"])
+    check("after_seq pull", [ln.text for ln in store.pull(2)] == ["Done"])
+    check("카운터", store.counters() == {"MLOG": 1, "SHELL": 2}, str(store.counters()))
+
+    absolute = render_line(lines[0], TS_ABSOLUTE)
+    relative = render_line(lines[0], TS_RELATIVE)
+    off = render_line(lines[0], TS_OFF)
+    check("타임스탬프 절대 렌더", absolute.endswith("hello world") and absolute.startswith("["), absolute)
+    check("타임스탬프 상대 렌더", "+" in relative and relative.endswith("hello world"), relative)
+    check("타임스탬프 끔", off == "hello world", off)
+    check("병합 뷰 prefix", "[MLOG]" in render_line(lines[0], TS_ABSOLUTE, show_prefix=True))
+    check("TX 는 >>> 로 표시", ">>> otcli state" in render_line(lines[1], TS_OFF))
+
+    check("포트 파일 형식", format_for_port_file(lines[0]).startswith("[2"),
+          format_for_port_file(lines[0]))
+    check("병합 파일 형식은 기존 transcript 계열",
+          "[MLOG] hello world" in format_for_merged_file(lines[0]),
+          format_for_merged_file(lines[0]))
+
+    store.stop_session()
+    day = time.strftime("%m%d")
+    mlog_path = os.path.join(tmp, day, "unit_mlog.log")
+    all_path = os.path.join(tmp, day, "unit_all.log")
+    check("포트별 파일 생성", os.path.exists(mlog_path), mlog_path)
+    check("병합 파일 생성", os.path.exists(all_path), all_path)
+    with open(all_path, "r", encoding="utf-8") as fh:
+        merged = fh.read()
+    check("병합 파일에 3줄 모두 기록", merged.count("\n") == 3, repr(merged))
+    check("병합 파일에 TX 에코 기록", ">>> otcli state" in merged, repr(merged))
+
+    # ring 상한
+    store2 = LogStore(capacity_per_port=1_000)
+    for i in range(2_500):
+        store2.append("MLOG", f"line {i}")
+    kept = store2.pull(-1, ["MLOG"])
+    check("ring 상한 유지", len(kept) <= 1_000, f"{len(kept)} 줄 남음")
+    check("ring 은 최신을 남긴다", kept[-1].text == "line 2499", kept[-1].text)
+    check("총 카운터는 유실 없이 누적", store2.counters()["MLOG"] == 2_500)
+
+    result = store2.pull_with_gap(-1, ["MLOG"], limit=100)
+    check("pull limit 은 최신 쪽을 남긴다",
+          len(result.lines) == 100 and result.lines[-1].text == "line 2499")
+    check("생략된 개수를 알려준다 (조용한 유실 금지)", result.skipped > 0, str(result.skipped))
+
+    # ring 이 이미 밀어낸 구간은 개수를 셀 수 없다 — "없었던 일"로 보이면 안 된다
+    lagging = store2.pull_with_gap(5, ["MLOG"])
+    check("ring 에서 밀려난 구간을 evicted 로 알린다", lagging.evicted, "evicted 미표시")
+    fresh = store2.pull_with_gap(store2.last_seq() - 10, ["MLOG"])
+    check("따라잡은 커서는 evicted 로 오인하지 않는다", not fresh.evicted)
+
+    ordered = store2.pull(-1, ["MLOG"])
+    check("seq 순서와 시각 순서가 어긋나지 않는다",
+          all(a.t_wall <= b.t_wall for a, b in itertools.pairwise(ordered)))
+
+
+def test_rollover(tmp: str) -> None:
+    print("\n== 날짜 폴더 전환 ==")
+    store = LogStore()
+    store.start_session(tmp, "roll", ["MLOG"])
+    store.append("MLOG", "before midnight")
+    store.flush()                # 비동기 writer 를 확정시킨 뒤 날짜를 넘긴다
+    store._session_day = "0101"  # 자정을 넘긴 상태를 흉내낸다
+    store.append("MLOG", "after midnight")
+    store.stop_session()
+    today = time.strftime("%m%d")
+    day_dir = os.path.join(tmp, today)
+    check("자정 후 오늘 폴더로 다시 열림", os.path.exists(os.path.join(day_dir, "roll_mlog.log")))
+    # 날짜가 바뀌면 세션명에 날짜를 붙인다 — 안 그러면 파일명의 HHMMSS 가 내용과 어긋난다
+    rolled = os.path.join(day_dir, f"roll_{today}_mlog.log")
+    check("전환 후 파일명에 새 날짜가 붙는다", os.path.exists(rolled), str(os.listdir(day_dir)))
+    with open(rolled, "r", encoding="utf-8") as fh:
+        body = fh.read()
+    check("전환 후 라인이 새 파일에 기록", "after midnight" in body, repr(body))
+    with open(os.path.join(day_dir, "roll_mlog.log"), "r", encoding="utf-8") as fh:
+        check("전환 전 라인은 옛 파일에 남는다", "before midnight" in fh.read())
+
+
+def test_concurrent_load(tmp: str) -> None:
+    print("\n== 동시 적재 부하 (3 스레드) ==")
+    store = LogStore(capacity_per_port=50_000)
+    store.start_session(tmp, "load", ["MLOG", "SHELL", "UCLI"])
+    per_thread = 5_000
+
+    def writer(role: str) -> None:
+        for i in range(per_thread):
+            store.append(role, f"{role} line {i}")
+
+    threads = [threading.Thread(target=writer, args=(role,))
+               for role in ("MLOG", "SHELL", "UCLI")]
+    start = time.monotonic()
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    elapsed = time.monotonic() - start
+    store.stop_session()
+
+    counters = store.counters()
+    check("스레드 3개가 넣은 라인이 하나도 안 빠졌다",
+          all(counters[role] == per_thread for role in ("MLOG", "SHELL", "UCLI")), str(counters))
+
+    lines = store.pull(-1)
+    check("seq 는 경합 중에도 중복·역전이 없다",
+          all(a.seq < b.seq for a, b in itertools.pairwise(lines)), "seq 순서 깨짐")
+    check(f"15k 라인 적재 {elapsed:.2f}s", elapsed < 20.0, f"{elapsed:.2f}s")
+
+    day = time.strftime("%m%d")
+    with open(os.path.join(tmp, day, "load_all.log"), "r", encoding="utf-8") as fh:
+        merged = fh.read().splitlines()
+    check("병합 파일에 15,000줄 전부 기록",
+          len(merged) == per_thread * 3, f"{len(merged)}줄")
+    check("병합 파일에 라인이 섞여 깨진 곳 없음",
+          all(line.startswith("[") and "] [" in line for line in merged[:2000]),
+          next((line for line in merged[:2000] if not line.startswith("[")), ""))
+
+    for role in ("MLOG", "SHELL", "UCLI"):
+        path = os.path.join(tmp, day, f"load_{role.lower()}.log")
+        with open(path, "r", encoding="utf-8") as fh:
+            count = sum(1 for _ in fh)
+        check(f"{role} 포트 파일에 {per_thread}줄", count == per_thread, f"{count}줄")
+
+
+def test_rotation_and_marker(tmp: str) -> None:
+    print("\n== 크기 회전 · 마커 · 세션 분절 ==")
+    store = LogStore()
+    store.max_file_bytes = 1_500  # 시험용으로 낮춘다 (기본 200MB)
+    store.start_session(tmp, "rot", ["MLOG"])
+    for i in range(60):
+        store.append("MLOG", f"filler line {i} {'x' * 40}")
+    store.marker("cycle 1 done")
+    split_name = store.split_session()
+    store.append("MLOG", "after split")
+    store.stop_session()
+
+    day = time.strftime("%m%d")
+    day_dir = os.path.join(tmp, day)
+    files = sorted(os.listdir(day_dir))
+    check("크기 상한 도달 시 _pN 으로 자동 분절", any("rot_p" in f for f in files), str(files))
+    check("마커가 _mark.log 로 남는다",
+          any(f.endswith("_mark.log") for f in files), str(files))
+    check("수동 분절 이름이 반환된다", split_name.startswith("rot_p"), split_name)
+    with open(os.path.join(day_dir, f"{split_name}_mlog.log"), encoding="utf-8") as fh:
+        check("분절 후 라인은 새 파일로 간다", "after split" in fh.read())
+    total = 0
+    for name in files:
+        if name.startswith("rot") and name.endswith("_all.log"):
+            with open(os.path.join(day_dir, name), encoding="utf-8") as fh:
+                total += sum(1 for _ in fh)
+    check("분절돼도 병합 라인 총합은 유실 없다 (60+마커+1)", total == 62, str(total))
+
+    from .core.filters import TriggerRule, TriggerWatcher
+    watcher = TriggerWatcher()
+    watcher.set_rules([TriggerRule("WDOG"), TriggerRule("fault", ports=["MLOG"])])
+    store2 = LogStore()
+    store2.append("MLOG", "[SYS] WDOG1 reset")
+    store2.append("SHELL", "hard fault here")   # ports=[MLOG] 라 안 잡혀야 함
+    store2.append("MLOG", "MemManage fault")
+    hits = watcher.scan(store2)
+    check("트리거 매치 집계", watcher.counts.get("WDOG") == 1 and watcher.counts.get("fault") == 1,
+          str(watcher.counts))
+    check("포트 한정 트리거는 다른 포트를 무시", len(hits) == 2, str(hits))
+    check("재스캔 시 같은 라인을 두 번 세지 않는다", watcher.scan(store2) == [])
+
+
+def test_review_regressions(tmp: str) -> None:
+    """2026-08-03 리뷰 지적에 대한 수정의 회귀 가드."""
+    print("\n== 리뷰 수정 회귀 가드 ==")
+
+    # LOCK-SCOPE-IO: 디스크가 늦어도 append/pull 이 막히면 안 된다
+    store = LogStore()
+    store.start_session(tmp, "lockscope", ["MLOG"])
+    original_write = type(store)._service
+    slow = {"n": 0}
+
+    class SlowWriter:
+        def write(self, _text):
+            slow["n"] += 1
+            time.sleep(0.4)
+
+        def close(self):
+            pass
+        error = None
+        bytes_written = 0
+
+    with store._service_lock:
+        store._writers["MLOG"] = SlowWriter()
+        store._merged = SlowWriter()
+    store.append("MLOG", "trigger slow write")
+    time.sleep(0.15)                       # writer 스레드가 느린 write 중
+    started = time.monotonic()
+    store.append("MLOG", "must not block")
+    store.pull(-1, ["MLOG"])
+    blocked = time.monotonic() - started
+    check(f"느린 디스크가 수신/조회를 막지 않는다 ({blocked * 1000:.0f}ms)", blocked < 0.2,
+          f"{blocked:.2f}s 블록")
+    with store._service_lock:
+        store._writers.clear()
+        store._merged = None
+    store.stop_session()
+    assert original_write is type(store)._service
+
+    # PROBE-FALLBACK: 토큰 에코가 있으면 서명 미매치를 MLOG 로 확정하지 않는다
+    token = portscan.DEFAULT_PROBE_TOKEN
+    verdict, _ = portscan.classify_probe_text(f"> {token}\r\nUnknown command: {token}\r\n", token)
+    check("모르는 응답 문구는 판정 보류", verdict == portscan.VERDICT_UNKNOWN, verdict)
+
+    # ANSI: 색은 본문에서 떼되 버리지 않고 span 으로 보관한다
+    from .core import ansi as ansi_mod
+    from .core.logstore import strip_ansi
+    check("콜론형 SGR 제거", strip_ansi("\x1b[38:5:196mRED\x1b[0m") == "RED")
+    check("private prefix CSI 제거", strip_ansi("\x1b[?25lX") == "X")
+    check("라인 말미의 잘린 CSI 제거", strip_ansi("text\x1b[3") == "text")
+    check("정상 텍스트는 안 건드린다", strip_ansi("normal [ZCL] 1;2 text") == "normal [ZCL] 1;2 text")
+
+    clean, spans = ansi_mod.parse("\x1b[32mGREEN\x1b[0m plain \x1b[1;31mBOLDRED\x1b[0m")
+    check("색을 뗀 본문", clean == "GREEN plain BOLDRED", clean)
+    check("색 구간 2개", len(spans) == 2, str(spans))
+    check("첫 구간이 GREEN 을 정확히 덮는다",
+          spans[0][0] == 0 and spans[0][1] == 5 and spans[0][2], str(spans[0]))
+    check("두 번째 구간은 굵게 + 빨강",
+          spans[1][4] is True and spans[1][2].lower() != spans[0][2].lower(), str(spans[1]))
+    check("색이 없으면 span 도 없다", ansi_mod.parse("plain") == ("plain", ()))
+    check("256색 SGR 파싱", ansi_mod.parse("\x1b[38;5;196mX\x1b[0m")[1][0][2].startswith("#"))
+
+    store_ansi = LogStore()
+    line = store_ansi.append("MLOG", "\x1b[33mWARN\x1b[0m tail")
+    check("적재 시 본문에 이스케이프가 없다", "\x1b" not in line.text and line.text == "WARN tail")
+    check("적재 시 색 구간이 보존된다", len(line.spans) == 1 and line.spans[0][:2] == (0, 4),
+          str(line.spans))
+    redacting = LogStore()
+    redacting.set_redactor(Redactor(DEFAULT_REDACT_RULES))
+    masked_line = redacting.append("SHELL", "\x1b[32mwifi connect AP hunter2pass\x1b[0m")
+    check("마스킹된 줄은 색 구간을 버린다 (offset 어긋남 방지)",
+          masked_line.spans == () and "hunter2pass" not in masked_line.text, str(masked_line))
+
+    # 형태 기반 redact — 키워드가 라인 경계로 잘려도 값 자체로 잡는다
+    redactor = Redactor(DEFAULT_REDACT_RULES)
+    masked = redactor.apply("2233445566778899aabbccddeeff00112233445566778899aabbccddeeff")
+    check("키워드 없이도 긴 hex 는 마스킹된다", "aabbccddeeff" not in masked, masked)
+    check("짧은 hex(주소 등)는 안 건드린다",
+          redactor.apply("pc=0x08010000 len=1234") == "pc=0x08010000 len=1234")
+
+    # transform 파이프라인이 확장을 지우지 않는다
+    store2 = LogStore()
+    store2.add_transform(lambda text: text.replace("AAA", "BBB"))
+    store2.set_ansi_strip(True)
+    check("set_ansi_strip 이 커스텀 변환을 지우지 않는다",
+          store2.append("MLOG", "\x1b[31mAAA\x1b[0m").text == "BBB")
+
+    # usable_sizes 가 bool 을 int 로 통과시키면 패널 폭이 0 이 된다
+    from .ui.main_window import usable_sizes
+    check("bool 은 분할 크기로 인정하지 않는다", usable_sizes([True, False], 2) is None)
+
+    # TriggerWatcher.reset(rewind) — store 교체 시 커서까지 되돌려야 집계가 산다
+    from .core.filters import TriggerRule, TriggerWatcher
+    watcher = TriggerWatcher()
+    watcher.set_rules([TriggerRule("WDOG")])
+    old_store = LogStore()
+    for i in range(50):
+        old_store.append("MLOG", f"line {i}")
+    old_store.append("MLOG", "WDOG1 reset")
+    watcher.scan(old_store)
+    new_store = LogStore()
+    new_store.append("MLOG", "WDOG1 reset in new session")
+    watcher.reset()
+    check("커서 유지 reset 은 옛 커서를 지키느라 새 store 를 못 본다", watcher.scan(new_store) == [])
+    watcher.reset(rewind=True)
+    check("rewind reset 이면 새 store 의 트리거를 잡는다", len(watcher.scan(new_store)) == 1)
+
+
+def test_log_features(tmp: str) -> None:
+    print("\n== 로그 기능 (제어문자·멈춤·파일명) ==")
+    from .core.logstore import MERGED_KEY, sanitize_controls
+
+    # 실제로 겪은 문제: NUL 한 개 때문에 편집기가 파일 전체를 바이너리로 판정해 안 열린다
+    check("NUL 을 눈에 보이는 표기로 바꾼다", sanitize_controls("a\x00b") == "a<00>b")
+    check("다른 C0 제어문자도 처리", sanitize_controls("x\x01\x1fy") == "x<01><1F>y")
+    check("탭은 살린다", sanitize_controls("a\tb") == "a\tb")
+    check("한글·일반 문자는 그대로", sanitize_controls("정상 [ZCL] 텍스트") == "정상 [ZCL] 텍스트")
+
+    store = LogStore()
+    store.start_session(tmp, "ctrl", ["MLOG"])
+    store.append("MLOG", "before\x00after")
+    store.flush()
+    store.stop_session()
+    day_dir = os.path.join(tmp, time.strftime("%m%d"))
+    with open(os.path.join(day_dir, "ctrl_mlog.log"), "rb") as fh:
+        raw = fh.read()
+    check("로그 파일에 NUL 바이트가 없다 (편집기가 열 수 있다)", b"\x00" not in raw, str(raw[:60]))
+    check("제어문자 흔적은 남는다", b"<00>" in raw, str(raw[:60]))
+
+    # 기록 멈춤 — 화면·ring 은 계속, 파일만 멈춘다
+    store2 = LogStore()
+    store2.start_session(tmp, "pause", ["MLOG"])
+    store2.append("MLOG", "recorded 1")
+    store2.flush()
+    store2.set_paused(True)
+    for i in range(5):
+        store2.append("MLOG", f"while paused {i}")
+    check("멈춘 동안에도 ring 에는 쌓인다",
+          sum(1 for ln in store2.pull(-1, ["MLOG"]) if "while paused" in ln.text) == 5)
+    dropped = store2.set_paused(False)
+    check("멈춘 동안 미기록 줄 수를 알려준다", dropped == 5, str(dropped))
+    store2.append("MLOG", "recorded 2")
+    store2.flush()
+    store2.stop_session()
+    with open(os.path.join(day_dir, "pause_mlog.log"), encoding="utf-8") as fh:
+        body = fh.read()
+    check("멈춤 전후는 파일에 있다", "recorded 1" in body and "recorded 2" in body)
+    check("멈춘 구간은 파일에 없다", "while paused" not in body)
+    check("멈춤/재개가 그 포트 파일에도 표시된다 (공백 오해 방지)",
+          "일시정지" in body and "재개" in body, body[-200:])
+
+    # 포트별 파일명 + 세션 접두어 옵션
+    store3 = LogStore()
+    store3.set_file_naming({"MLOG": "matter", "SHELL": "ht", MERGED_KEY: "merged"},
+                           include_session=False)
+    store3.start_session(tmp, "named", ["MLOG", "SHELL"])
+    store3.append("MLOG", "x")
+    store3.append("SHELL", "y")
+    store3.flush()
+    files = set(os.listdir(day_dir))
+    check("포트별 지정 이름으로 저장된다", {"matter.log", "ht.log"} <= files, str(sorted(files)))
+    check("병합 파일명도 지정된다", "merged.log" in files, str(sorted(files)))
+    check("세션 접두어를 끄면 이름만 쓴다", not any(f.startswith("named_") for f in files))
+    check("파일 경로/크기 조회", store3.file_paths().get("MLOG", "").endswith("matter.log")
+          and store3.file_sizes().get("MLOG", 0) > 0)
+    store3.stop_session()
+
+    # 트래픽 없는 포트는 파일을 만들지 않는다 (0바이트 파일이 쌓이던 문제)
+    store5 = LogStore()
+    store5.start_session(tmp, "lazyfile", ["MLOG", "SHELL", "UCLI"])
+    day_files = os.listdir(day_dir)
+    check("세션을 열어도 빈 파일을 미리 만들지 않는다",
+          not any(f.startswith("lazyfile") for f in day_files),
+          str([f for f in day_files if f.startswith('lazyfile')]))
+    store5.append("MLOG", "only mlog")
+    store5.flush()
+    made = sorted(f for f in os.listdir(day_dir) if f.startswith("lazyfile"))
+    check("트래픽이 온 포트만 파일이 생긴다",
+          made == ["lazyfile_all.log", "lazyfile_mlog.log"], str(made))
+    check("생긴 파일은 0바이트가 아니다",
+          all(os.path.getsize(os.path.join(day_dir, f)) > 0 for f in made))
+    check("flush 는 디스크까지 내린다 (다른 도구가 바로 읽는다)",
+          os.path.getsize(os.path.join(day_dir, "lazyfile_mlog.log")) > 0)
+    store5.stop_session()
+
+    store4 = LogStore()
+    store4.set_file_naming({"MLOG": "bad/name*?"}, include_session=True)
+    store4.start_session(tmp, "safe", ["MLOG"])
+    store4.append("MLOG", "z")
+    store4.flush()
+    check("파일명에 못 쓰는 문자는 걸러낸다",
+          any(f.startswith("safe_badname") for f in os.listdir(day_dir)),
+          str([f for f in os.listdir(day_dir) if f.startswith("safe")]))
+    store4.stop_session()
+
+
+def test_redact() -> None:
+    print("\n== redact ==")
+    redactor = Redactor([
+        RedactRule(r"(?i)\bwifi\s+connect\s+\S+\s+(\S+)", "<PSK-redacted>"),
+        RedactRule(r"secret-\d+", "<gone>"),
+    ])
+    masked = redactor.apply("wifi connect NTGR_F699 hunter2pass")
+    check("그룹1만 치환", masked == "wifi connect NTGR_F699 <PSK-redacted>", masked)
+    check("SSID 는 남는다", "NTGR_F699" in masked, masked)
+    whole = redactor.apply("token secret-12345 end")
+    check("그룹 없으면 매치 전체 치환", whole == "token <gone> end", whole)
+    check("깨진 regex 는 무시", Redactor([RedactRule("(unclosed", "x")]).apply("(unclosed") == "(unclosed")
+
+    store = LogStore()
+    store.set_redactor(redactor)
+    line = store.append("SHELL", "wifi connect AP hunter2pass", is_tx=True)
+    check("ring 에 원문이 남지 않는다", "hunter2pass" not in line.text, line.text)
+
+    literal = Redactor([RedactRule("pass+word(1)", "<lit>", is_regex=False)])
+    check("리터럴 모드는 메타문자를 그대로 찾는다",
+          literal.apply("token pass+word(1) end") == "token <lit> end",
+          literal.apply("token pass+word(1) end"))
+    regex_mode = Redactor([RedactRule("pass+word(1)", "<lit>", is_regex=True)])
+    check("regex 모드로는 같은 문자열이 안 잡힌다 (리터럴 모드가 필요한 이유)",
+          "pass+word(1)" in regex_mode.apply("token pass+word(1) end"))
+
+    reporter = Redactor()
+    invalid = reporter.set_rules([RedactRule("(unclosed", "x"), RedactRule("ok", "y")])
+    check("깨진 redact 룰을 조용히 버리지 않고 보고한다", invalid == ["(unclosed"], str(invalid))
+    check("멀쩡한 룰은 살아 있다", reporter.apply("ok") == "y")
+
+
+def test_filters() -> None:
+    print("\n== 필터 ==")
+    store = LogStore()
+    store.append("MLOG", "CASE session established")
+    store.append("SHELL", "no match here")
+    store.append("MLOG", "case insensitive")
+    lines = store.pull(-1)
+
+    rule = FilterRule(pattern="CASE")
+    hits = [ln.text for ln in lines if rule.match(ln)]
+    check("substring 은 기본 대소문자 무시", len(hits) == 2, str(hits))
+
+    rule_cs = FilterRule(pattern="CASE", case_sensitive=True)
+    check("대소문자 구분", len([ln for ln in lines if rule_cs.match(ln)]) == 1)
+
+    rule_port = FilterRule(pattern="", ports=["SHELL"])
+    check("포트 한정", [ln.text for ln in lines if rule_port.match(ln)] == ["no match here"])
+
+    meta = FilterRule(pattern="[ZCL]")
+    store.append("MLOG", "[ZCL] attribute")
+    check("substring 은 regex 메타를 escape",
+          any(meta.match(ln) for ln in store.pull(-1)), "[ZCL] 매치 실패")
+
+    broken = FilterRule(pattern="(unclosed", is_regex=True)
+    check("깨진 regex 는 전부 차단", not any(broken.match(ln) for ln in store.pull(-1)))
+    check("하이라이트 룰 색 매핑", HighlightRule("x", "주황").qcolor_hex().startswith("#"))
+
+
+def test_probe_classification() -> None:
+    print("\n== probe 판정 ==")
+    token = portscan.DEFAULT_PROBE_TOKEN
+
+    shell_out = f"> {token}\r\nError {token}: 2f (Invalid argument)\r\n"
+    verdict, evidence = portscan.classify_probe_text(shell_out, token)
+    check("Matter shell 서명 → SHELL", verdict == portscan.ROLE_SHELL, f"{verdict} / {evidence}")
+
+    ucli_out = f"{token}\r\n\r\nInvalid command\r\n"
+    verdict, _ = portscan.classify_probe_text(ucli_out, token)
+    check("user_cli 서명 → UCLI", verdict == portscan.ROLE_UCLI, verdict)
+
+    noise = "[ZCL] some log line\r\n[DIS] another\r\n"
+    verdict, _ = portscan.classify_probe_text(noise, token)
+    check("로그만 흐르면 미확정", verdict == portscan.VERDICT_UNKNOWN, verdict)
+
+    stale = f"Invalid command\r\n{token}\r\nError {token}: 2f (Invalid argument)\r\n"
+    verdict, _ = portscan.classify_probe_text(stale, token)
+    check("에코 앞의 잔여 출력은 무시 (echo-anchor)", verdict == portscan.ROLE_SHELL, verdict)
+
+    # 에코가 없으면 토큰을 품지 않은 서명은 인정하지 않는다 (fail-closed)
+    noecho_noise = "[ZCL] boot\r\nInvalid command found in payload\r\n[DIS] mDNS\r\n"
+    verdict, _ = portscan.classify_probe_text(noecho_noise, token)
+    check("에코 없이 흘러온 문자열만으로는 UCLI 로 단정하지 않는다",
+          verdict == portscan.VERDICT_UNKNOWN, verdict)
+    noecho_anchored = f"Error {token}: 2f (Invalid argument)\r\n"
+    verdict, _ = portscan.classify_probe_text(noecho_anchored, token)
+    check("에코가 없어도 토큰을 품은 서명은 인정한다", verdict == portscan.ROLE_SHELL, verdict)
+
+    check("COM10+ 는 \\\\.\\ 접두어", portscan.port_name("COM11") == "\\\\.\\COM11",
+          portscan.port_name("COM11"))
+    check("COM9 이하는 그대로", portscan.port_name("COM4") == "COM4")
+
+
+def test_port_reader() -> None:
+    print("\n== PortReader (가짜 시리얼) ==")
+    store = LogStore()
+    fake = FakeSerial([b"first line\r\n", b"second ", b"line\r\n"])
+    created: list[FakeSerial] = [fake]
+
+    def fake_open(_com, _baud, timeout=0.05):  # noqa: ARG001
+        return created[-1]
+
+    original = portscan.open_serial
+    portscan.open_serial = fake_open
+    try:
+        reader = PortReader("MLOG", "COM99", 115200, store)
+        ok, err = reader.start()
+        check("가짜 포트 open", ok, err)
+        check("라인 조립 (CRLF 분리)",
+              wait_until(lambda: [ln.text for ln in store.pull(-1, ["MLOG"])] ==
+                         ["first line", "second line"]),
+              str([ln.text for ln in store.pull(-1, ['MLOG'])]))
+
+        seq = store.last_seq()
+        fake.feed(b"> ")  # 개행 없는 프롬프트
+        check("개행 없는 프롬프트도 표시된다",
+              wait_until(lambda: any("<partial>" in ln.text
+                                     for ln in store.pull(seq, ["MLOG"])), timeout=2.0))
+
+        ok, err = reader.send("otcli state")
+        check("송신 성공", ok, err)
+        check("시리얼로 CRLF 종단 전송", fake.written and fake.written[-1] == b"otcli state\r\n",
+              str(fake.written))
+        check("TX 에코가 ring 에 남는다",
+              any(ln.is_tx and ln.text == "otcli state" for ln in store.pull(-1, ["MLOG"])))
+
+        # 읽기 실패 → 재접속 배너 → 새 핸들로 복구
+        seq = store.last_seq()
+        replacement = FakeSerial([b"after reopen\r\n"])
+        created.append(replacement)
+        fake.fail_after = 0
+        reader.reconnect_interval = 0.1
+        check("read error 배너",
+              wait_until(lambda: any("read error" in ln.text
+                                     for ln in store.pull(seq, ["MLOG"])), timeout=3.0))
+        check("자동 재접속 후 reopened 배너",
+              wait_until(lambda: any("reopened" in ln.text
+                                     for ln in store.pull(seq, ["MLOG"])), timeout=3.0))
+        check("재접속 후 수신 재개",
+              wait_until(lambda: any("after reopen" in ln.text
+                                     for ln in store.pull(seq, ["MLOG"])), timeout=3.0))
+        # 끊기기 직전의 부분 라인을 버리지 않는다
+        seq = store.last_seq()
+        broken = FakeSerial()
+        created.append(broken)
+        broken.feed(b"last words before death")
+        time.sleep(0.05)
+        broken.fail_after = broken.reads + 1
+        reader._ser = broken
+        check("끊기기 직전 부분 라인이 살아남는다",
+              wait_until(lambda: any("last words before death" in ln.text
+                                     for ln in store.pull(seq, ["MLOG"])), timeout=3.0),
+              str([ln.text for ln in store.pull(seq, ["MLOG"])][:4]))
+
+        seq = store.last_seq()
+        check("정상 stop 은 True 를 돌려준다", reader.stop() is True)
+        check("stop 후 스레드 종료", not reader.is_running)
+        check("정상 해제는 read error 배너를 남기지 않는다",
+              not any("read error" in ln.text for ln in store.pull(seq, ["MLOG"])),
+              str([ln.text for ln in store.pull(seq, ["MLOG"])]))
+    finally:
+        portscan.open_serial = original
+
+
+def test_port_reader_probe() -> None:
+    print("\n== PortReader.probe (라이브 경로) ==")
+    store = LogStore()
+    fake = FakeSerial()
+    original = portscan.open_serial
+    portscan.open_serial = lambda _c, _b, timeout=0.05: fake  # noqa: ARG005
+    try:
+        reader = PortReader("SHELL", "COM98", 115200, store)
+        reader.start()
+        token = portscan.DEFAULT_PROBE_TOKEN
+
+        def answer() -> None:
+            time.sleep(0.4)
+            fake.feed(f"Error {token}: 2f (Invalid argument)\r\n".encode())
+
+        threading.Thread(target=answer, daemon=True).start()
+        result = reader.probe(token, passive_seconds=0.1, response_timeout=2.0)
+        check("라이브 probe 가 SHELL 판정", result.verdict == portscan.ROLE_SHELL, result.detail)
+        check("probe 는 토큰 1줄만 보낸다",
+              fake.written == [token.encode() + b"\r\n"], str(fake.written))
+        reader.stop()
+    finally:
+        portscan.open_serial = original
+
+
+def test_profile(tmp: str) -> None:
+    print("\n== 프로파일 ==")
+    original_dir = config_mod.PROFILE_DIR
+    original_settings = config_mod.SETTINGS_PATH  # 실제 설정 파일을 건드리면 안 된다
+    config_mod.PROFILE_DIR = os.path.join(tmp, "profiles")
+    config_mod.SETTINGS_PATH = os.path.join(tmp, "settings.json")
+    try:
+        profile = Profile()
+        profile.name = "unit-bench"
+        profile.ports = [PortConfig("MLOG", "COM4"), PortConfig("SHELL", "COM5"),
+                         PortConfig("UCLI", "COM8")]
+        profile.saved_filters = [FilterRule(pattern="CASE", name="case")]
+        profile.command_history = {"SHELL": ["otcli state"]}
+        ok, path = profile.save()
+        check("프로파일 저장", ok, path)
+
+        loaded, warning = Profile.load("unit-bench")
+        check("프로파일 왕복", not warning and loaded.port("SHELL").com == "COM5",
+              f"{warning} / {loaded.to_dict()}")
+        check("필터 왕복", loaded.saved_filters[0].pattern == "CASE")
+        check("히스토리 왕복", loaded.command_history.get("SHELL") == ["otcli state"])
+        check("COM 기본값은 비어 있다 (FR-9 하드코딩 금지)",
+              all(p.com == "" for p in Profile().ports))
+
+        # 로그 기본 위치: 설치 시 고른 값 > 기존 벤치 경로 > Windows 문서 폴더
+        config_mod.save_settings({"log_base_dir": r"D:\chosen\by\installer"})
+        check("설치 시 지정한 로그 위치가 새 프로파일 기본값이 된다",
+              Profile().log_base_dir == r"D:\chosen\by\installer", Profile().log_base_dir)
+        config_mod.save_settings({})
+        fallback = config_mod.default_log_base()
+        check("지정이 없으면 데이터 폴더 아래 logs 를 쓴다 (개인 경로 하드코딩 금지)",
+              fallback == os.path.join(config_mod.DATA_DIR, "logs"), fallback)
+        # 하드코딩이 아니라 "설치 위치를 따라간다" 는 것을 확인 — DATA_DIR 을 옮기면 같이 옮겨야 한다
+        moved_dir = os.path.join(tmp, "elsewhere")
+        original_data = config_mod.DATA_DIR
+        config_mod.DATA_DIR = moved_dir
+        try:
+            check("설치 위치가 바뀌면 로그 기본값도 따라간다",
+                  config_mod.default_log_base() == os.path.join(moved_dir, "logs"),
+                  config_mod.default_log_base())
+        finally:
+            config_mod.DATA_DIR = original_data
+        check("기존 프로파일의 로그 위치는 설치값이 덮어쓰지 않는다",
+              Profile.from_dict({"log_base_dir": r"E:\kept"}).log_base_dir == r"E:\kept")
+
+        broken = Profile.path_for("broken")
+        os.makedirs(config_mod.PROFILE_DIR, exist_ok=True)
+        with open(broken, "w", encoding="utf-8") as fh:
+            fh.write("{ not json")
+        recovered, warning = Profile.load("broken")
+        check("깨진 프로파일도 기동은 된다", recovered.roles() == ["MLOG", "SHELL", "UCLI"])
+        check("깨진 프로파일 경고 + .bak 보존",
+              bool(warning) and os.path.exists(broken + ".bak"), warning)
+
+        # 프로파일 JSON 은 벤치 간 복사·공유용이다. 로그에서 지운 비밀값이 여기 남으면 안 된다
+        secret = Profile()
+        secret.name = "unit-secret"
+        secret.set_redactor(Redactor(DEFAULT_REDACT_RULES))
+        secret.command_history = {"SHELL": ["wifi connect NTGR hunter2pass"]}
+        secret.scratchpad = "dataset networkkey 00112233445566778899aabbccddeeff\notcli state"
+        secret.save()
+        with open(Profile.path_for("unit-secret"), "r", encoding="utf-8") as fh:
+            raw = fh.read()
+        check("프로파일에 명령 히스토리의 PSK 가 평문으로 안 남는다", "hunter2pass" not in raw)
+        check("프로파일에 스크래치패드의 networkkey 가 평문으로 안 남는다",
+              "00112233445566778899aabbccddeeff" not in raw)
+        check("마스킹해도 명령 형태는 남아 재사용 가능", "wifi connect NTGR" in raw)
+    finally:
+        config_mod.PROFILE_DIR = original_dir
+        config_mod.SETTINGS_PATH = original_settings
+
+
+def test_session(tmp: str) -> None:
+    print("\n== SerialHubSession ==")
+    profile = Profile()
+    profile.log_base_dir = tmp
+    profile.ports = [PortConfig("MLOG", "COM97"), PortConfig("SHELL", ""), PortConfig("UCLI", "")]
+    session = SerialHubSession(profile)
+    fake = FakeSerial([b"boot\r\n"])
+    original = portscan.open_serial
+    portscan.open_serial = lambda _c, _b, timeout=0.05: fake  # noqa: ARG005
+    try:
+        name = session.start_recording()
+        check("세션명 자동 생성", name.startswith(profile.session_prefix), name)
+        results = session.connect_all()
+        check("COM 미지정 포트는 건너뛴다", len(results) == 1, str(results))
+        check("연결 상태 조회", wait_until(lambda: session.is_connected("MLOG")))
+        check("미연결 포트 전송은 거부", session.send("SHELL", "x")[0] is False)
+        session.shutdown()
+        check("shutdown 후 전부 해제", not session.any_connected())
+    finally:
+        portscan.open_serial = original
+
+
+# ---------------------------------------------------------------------- GUI
+
+def test_gui(tmp: str) -> None:
+    print("\n== GUI (offscreen) ==")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    from .core.filters import FilterRule as FR
+    from .ui import theme
+    from .ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    theme.apply_theme(app)
+
+    # 창을 닫으면 프로파일이 저장된다 — 실제 profiles/ 를 더럽히지 않도록 임시 폴더로 돌린다
+    original_profile_dir = config_mod.PROFILE_DIR
+    original_settings = config_mod.SETTINGS_PATH
+    config_mod.PROFILE_DIR = os.path.join(tmp, "gui-profiles")
+    config_mod.SETTINGS_PATH = os.path.join(tmp, "gui-settings.json")
+
+    # Qt 슬롯 안에서 난 예외는 조용히 삼켜진다 — 잡아서 실패로 만든다
+    slot_errors: list[str] = []
+    original_hook = sys.excepthook
+
+    def _record(exc_type, exc, tb):
+        slot_errors.append(f"{exc_type.__name__}: {exc}")
+        original_hook(exc_type, exc, tb)  # 기록만 하고 삼키면 테스트 자체의 예외도 안 보인다
+
+    sys.excepthook = _record
+
+    profile = Profile()
+    profile.name = "__selftest__"
+    profile.log_base_dir = tmp
+    profile.highlight_rules = [HighlightRule("CASE", "빨강")]
+    window = MainWindow(profile)
+    window.show()
+
+    store = window.session.store
+    for i in range(500):
+        store.append("MLOG", f"[ZCL] CASE line {i}")
+    store.append("SHELL", "otcli state", is_tx=True)
+    store.append("UCLI", "")
+    window.tick()
+    pump(app)
+
+    mlog_pane = window.panes["MLOG"]
+    check("콘솔에 수신 라인 반영", "CASE line 499" in mlog_pane.view.toPlainText())
+    check("빈 라인 숨김 기본 on", window.panes["UCLI"].view.toPlainText().strip() == "",
+          repr(window.panes["UCLI"].view.toPlainText()))
+    window.panes["UCLI"].empty_button.setChecked(False)
+    pump(app)
+    check("빈 라인 숨김 해제하면 보인다",
+          window.panes["UCLI"].view.toPlainText() != "", "빈 줄이 여전히 숨겨짐")
+
+    before = mlog_pane.view.toPlainText().splitlines()[0]
+    mlog_pane.cycle_ts_mode()
+    after = mlog_pane.view.toPlainText().splitlines()[0]
+    check("타임스탬프 토글이 과거 라인까지 다시 그린다", before != after, f"{before} / {after}")
+
+    mlog_pane.focus_search()
+    mlog_pane.search.edit.setText("CASE line 4")
+    mlog_pane.step_match(1)  # 디바운스를 건너뛰고 즉시 검색
+    pump(app)
+    check("검색 매치 카운트", mlog_pane.search.count_label.text() not in ("0/0", ""),
+          mlog_pane.search.count_label.text())
+
+    window.open_filter_view(FR(pattern="line 12", ports=["MLOG"]))
+    view = window.filter_views[-1]
+    view.pump()
+    pump(app)
+    text = view.pane.view.toPlainText()
+    check("필터드뷰 소급 채움", "line 12" in text, text[:120])
+    check("필터드뷰는 매치만 표시", "line 300" not in text)
+    check("필터드뷰는 prefix 를 붙인다", "[MLOG]" in text, text[:120])
+    view.close()
+    check("필터드뷰 닫으면 목록에서 빠진다", view not in window.filter_views)
+
+    window.command_panel.edit.setText("wifi connect AP hunter2pass")
+    pump(app)
+    check("입력 중 redact 미리보기", "hunter2pass" not in window.command_panel.hint.text(),
+          window.command_panel.hint.text())
+
+    for mode in ("columns", "tabs", "merged", "split"):
+        window._apply_layout(mode)
+        pump(app)
+        stray = [name for name, pane in list(window.panes.items()) + [("merged", window.merged_pane)]
+                 if pane.parent() is None and pane.isVisible()]
+        check(f"레이아웃 {mode}: 부모 없는 pane 이 창으로 뜨지 않는다", not stray, str(stray))
+    check("레이아웃 4종 전환", window.layout_mode == "split")
+
+    window._apply_layout("merged")
+    window.tick()
+    pump(app)
+    check("병합 뷰는 3포트를 한 화면에",
+          all(f"[{role}]" in window.merged_pane.view.toPlainText()
+              for role in ("MLOG", "SHELL")),
+          window.merged_pane.view.toPlainText()[:200])
+
+    # 병합 모드에서는 컨테이너가 merged_pane 자체다 — 전환하며 지우면 pane 이 파괴된다
+    window._apply_layout("columns")
+    pump(app)
+    window._apply_layout("merged")
+    pump(app)
+    window._apply_layout("split")
+    pump(app)
+    try:
+        window.merged_pane.view.blockCount()
+        window.tick()
+        pump(app)
+        merged_alive = True
+    except RuntimeError as exc:
+        merged_alive = False
+        print("      ", exc)
+    check("병합↔분할 왕복 후에도 pane 이 살아 있다 (deleteLater 오폭 방지)", merged_alive)
+
+    # 부하: 20k 라인을 pump 하며 UI 시간 측정
+    start = time.monotonic()
+    for i in range(20_000):
+        store.append("MLOG", f"[DIS] mDNS burst {i}")
+    window.tick()
+    pump(app)
+    elapsed = time.monotonic() - start
+    check(f"20k 라인 적재+렌더 {elapsed:.2f}s", elapsed < 12.0, f"{elapsed:.2f}s")
+    check("블록 상한이 메모리를 묶는다",
+          mlog_pane.view.blockCount() <= mlog_pane.view.maximumBlockCount() + 1,
+          str(mlog_pane.view.blockCount()))
+
+    # 같은 키가 창 컨텍스트에 두 번 걸리면 Qt 가 ambiguous 로 판단해 양쪽 다 발화하지 않는다.
+    # 패널마다 있는 Ctrl+F / F3 / Esc 는 WidgetWithChildrenShortcut 이라 중복이 아니다.
+    from PySide6.QtGui import QAction, QShortcut
+    window_contexts = (Qt.WindowShortcut, Qt.ApplicationShortcut)
+    registered: list[str] = []
+    for action in window.findChildren(QAction):
+        if action.shortcutContext() in window_contexts:
+            registered += [seq.toString() for seq in action.shortcuts() if not seq.isEmpty()]
+    for shortcut in window.findChildren(QShortcut):
+        if shortcut.context() in window_contexts and not shortcut.key().isEmpty():
+            registered.append(shortcut.key().toString())
+    duplicates = sorted({key for key in registered if registered.count(key) > 1})
+    check("창 컨텍스트 단축키 중복 등록 없음 (ambiguous 방지)", not duplicates, str(duplicates))
+    pane_scoped = [s for s in mlog_pane.findChildren(QShortcut)
+                   if s.context() == Qt.WidgetWithChildrenShortcut]
+    check("패널 단축키는 위젯 컨텍스트로 격리돼 있다", len(pane_scoped) >= 3, str(len(pane_scoped)))
+
+    before_views = len(window.filter_views)
+    for action in window.filter_menu.actions():
+        if action.shortcut().toString() == "Ctrl+K":
+            action.trigger()
+    check("Ctrl+K 액션이 필터드뷰를 연다", len(window.filter_views) == before_views + 1)
+    window.filter_views[-1].close()
+
+    window._rebuild_filter_menu()
+    window._rebuild_filter_menu()
+    ctrl_k_actions = [a for a in window.findChildren(QAction) if a.shortcut().toString() == "Ctrl+K"]
+    check("메뉴 재구성이 Ctrl+K 액션을 누적시키지 않는다", len(ctrl_k_actions) == 1,
+          f"{len(ctrl_k_actions)}개 남음")
+
+    # 분할 비율·창 지오메트리는 프로파일에 남아야 한다 (UI 문서 §1 약속)
+    from .ui.main_window import usable_sizes
+    window._apply_layout("split")
+    pump(app)
+    window._capture_layout()
+    stored = window.profile.layout.get("splitters", {})
+    check("분할 비율이 프로파일에 담긴다",
+          isinstance(stored.get("split_main"), list) and len(stored["split_main"]) == 2
+          and all(isinstance(v, int) for v in stored["split_main"]), str(stored))
+    check("창 지오메트리가 프로파일에 담긴다", bool(window.profile.layout.get("geometry")))
+    check("복원 검증: 정상 값은 그대로 쓴다", usable_sizes([800, 400], 2) == [800, 400])
+    check("복원 검증: 칸 수가 다르면 버린다", usable_sizes([800, 400, 200], 2) is None)
+    check("복원 검증: 합이 0이면 버린다 (패널이 폭 0 으로 사라짐)", usable_sizes([0, 0], 2) is None)
+    check("복원 검증: 손상된 값은 버린다", usable_sizes(["a", 1], 2) is None)
+
+    # 실제 pane 은 최소폭이 커서 offscreen 좁은 창에서는 비율이 안 보인다 —
+    # 저장값을 splitter 에 적용하는 경로 자체를 직접 검증한다
+    from PySide6.QtWidgets import QLabel, QSplitter
+    probe_splitter = QSplitter(Qt.Horizontal)
+    probe_splitter.addWidget(QLabel("a"))
+    probe_splitter.addWidget(QLabel("b"))
+    window.profile.layout["splitters"]["probe_key"] = [1000, 500]
+    window._restore_sizes(probe_splitter, "probe_key", [1, 1])
+    left, right = probe_splitter.sizes()
+    check("저장된 분할 비율이 splitter 에 적용된다 (좌 > 우)", left > right, f"{left}:{right}")
+    window.profile.layout["splitters"]["probe_key"] = [0, 0]
+    window._restore_sizes(probe_splitter, "probe_key", [700, 300])
+    left, right = probe_splitter.sizes()
+    check("손상된 저장값이면 기본 비율로 떨어진다", left > right, f"{left}:{right}")
+
+    # probe 결과가 현재 매핑과 다르면 매핑을 제안한다 (자동 적용은 하지 않는다)
+    page = window.connection_page
+    coms = {"MLOG": "COM4", "SHELL": "COM5", "UCLI": "COM8"}
+    for role, verdict in (("MLOG", "SHELL"), ("SHELL", "MLOG"), ("UCLI", "UCLI")):
+        page.cards[role].last_verdict = verdict
+        page.cards[role].last_probed_com = coms[role]  # 판정과 probe 한 COM 은 짝이어야 한다
+        page.profile.port(role).com = coms[role]
+    page._suggested = {}
+    page._update_suggestion()
+    check("역할이 뒤바뀐 probe 결과에 매핑 제안을 띄운다",
+          page._suggested.get("SHELL") == "COM4" and page._suggested.get("MLOG") == "COM5",
+          str(page._suggested))
+    page._apply_suggestion()
+    check("제안 적용이 프로파일 COM 을 바꾼다",
+          page.profile.port("SHELL").com == "COM4", str(page.profile.port("SHELL").com))
+
+    # probe 하지 않은 COM 은 제안에 섞이면 안 된다 (probe 중 콤보를 바꾼 상황)
+    page._suggested = {}
+    page.cards["MLOG"].last_probed_com = ""   # 콤보 변경으로 무효화된 상태
+    page._update_suggestion()
+    check("probe 한 적 없는 COM 은 제안하지 않는다", not page._suggested, str(page._suggested))
+
+    # 규칙 페이지를 한 번 건드렸다고 다른 룰 속성이 조용히 초기화되면 안 된다
+    window.profile.highlight_rules = [HighlightRule("CASE", "빨강", is_regex=False,
+                                                    case_sensitive=True)]
+    window.profile.saved_filters = [FR(pattern="Err", case_sensitive=True, name="f1")]
+    window.rules_page.reload(window.profile)
+    window.rules_page._collect()
+    check("규칙 페이지 편집이 하이라이트 대소문자 설정을 지우지 않는다",
+          window.profile.highlight_rules[0].case_sensitive)
+    check("규칙 페이지 편집이 저장된 필터의 대소문자 설정을 지우지 않는다",
+          window.profile.saved_filters[0].case_sensitive)
+    window.profile.redact_rules = [RedactRule("lit+eral", "<x>", is_regex=False)]
+    window.rules_page.reload(window.profile)
+    window.rules_page._collect()
+    check("규칙 페이지 편집이 redact 리터럴 모드를 지우지 않는다",
+          window.profile.redact_rules[0].is_regex is False)
+
+    # 연결 중 포트 콤보만 바꿔도 화면이 "새 COM 을 Connected" 라고 거짓말하면 안 된다
+    window.profile.port("MLOG").com = "COM999"
+    window.tick()
+    pump(app)
+    check("미연결 상태에서는 프로파일 COM 을 그대로 보여준다",
+          "COM999" in window.pills["MLOG"].text(), window.pills["MLOG"].text())
+
+    # 프로파일 저장 → 전환: 옛 store 를 붙들고 있는 위젯이 남으면 안 된다
+    window.save_profile_as("__selftest_b__")
+    check("프로파일 저장 후 목록에 뜬다",
+          any("__selftest_b__" in window.profile_page.list.item(i).text()
+              for i in range(window.profile_page.list.count())))
+    old_store = window.session.store
+    window.open_filter_view(FR(pattern="line", ports=["MLOG"]))
+    window.load_profile("__selftest__")
+    pump(app)
+    check("프로파일 전환 시 옛 store 를 쓰는 필터드뷰가 안 남는다", not window.filter_views)
+    check("전환 후 pane 이 새 store 를 본다",
+          all(pane.store is window.session.store for pane in window.panes.values()),
+          "pane.store 갱신 누락")
+    check("전환 후 명령 패널도 새 store/session",
+          window.command_panel.store is window.session.store and old_store is not window.session.store)
+    tick_error = ""
+    try:
+        window.tick()
+        pump(app)
+    except Exception as exc:  # noqa: BLE001 - 예외를 FAIL 로 만들어야 의미가 있다
+        tick_error = f"{type(exc).__name__}: {exc}"
+    check("전환 후에도 tick 이 예외 없이 돈다", not tick_error, tick_error)
+
+    window.close()
+    pump(app)
+    sys.excepthook = original_hook
+    config_mod.PROFILE_DIR = original_profile_dir
+    config_mod.SETTINGS_PATH = original_settings
+    check("Qt 슬롯에서 삼켜진 예외 없음", not slot_errors, "; ".join(slot_errors[:3]))
+
+
+def test_i18n() -> None:
+    """번역 누락 검사 — 새 문구를 넣고 영어 표를 안 채우면 여기서 걸린다."""
+    print("\n== i18n (한국어/영어) ==")
+    import ast
+    from .core import i18n
+    root = os.path.dirname(os.path.abspath(__file__))
+    keys = set()
+    for folder in ("ui", "core", "."):
+        base = os.path.join(root, folder)
+        for name in os.listdir(base):
+            if not name.endswith(".py"):
+                continue
+            try:
+                tree = ast.parse(open(os.path.join(base, name), encoding="utf-8").read())
+            except Exception:  # noqa: BLE001
+                continue
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id == "tr" and node.args
+                        and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)):
+                    keys.add(node.args[0].value)
+    check("번역 대상 문구를 찾았다", len(keys) > 200, str(len(keys)))
+    missing = i18n.missing_keys(keys)
+    check("영어 번역 누락 없음", not missing, f"{len(missing)}개: " + "; ".join(missing[:3]))
+
+    # 자리표시자({0}, {1:,})가 번역에서 사라지면 format() 이 터진다
+    import re
+    broken = []
+    for key, value in i18n.EN.items():
+        want = set(re.findall(r"\{(\d+)", key))
+        got = set(re.findall(r"\{(\d+)", value))
+        if want != got:
+            broken.append(key[:40])
+    check("번역문의 자리표시자가 원문과 같다", not broken, "; ".join(broken[:3]))
+
+    # ★모듈 최상위 상수에서 tr() 를 부르면 임포트 시점 언어로 굳는다 (언어 설정이 그 뒤다)
+    frozen = []
+    for folder in ("ui", "core", "."):
+        base = os.path.join(root, folder)
+        for name in os.listdir(base):
+            if not name.endswith(".py"):
+                continue
+            try:
+                tree = ast.parse(open(os.path.join(base, name), encoding="utf-8").read())
+            except Exception:  # noqa: BLE001
+                continue
+            for stmt in tree.body:
+                if not isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+                    continue
+                for node in ast.walk(stmt):
+                    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                            and node.func.id == "tr"):
+                        frozen.append(f"{folder}/{name}")
+                        break
+    check("모듈 최상위 상수에 tr() 가 없다 (임포트 시점에 굳는다)", not frozen,
+          "; ".join(sorted(set(frozen))))
+
+    # 색 이름은 프로파일에 저장되는 식별자다 — 번역되면 저장한 색을 못 찾는다
+    from .core.filters import DEFAULT_HIGHLIGHT_COLOR, HIGHLIGHT_COLORS
+    i18n.set_language("en")
+    check("색 팔레트 키는 언어와 무관하게 고정",
+          "노랑" in HIGHLIGHT_COLORS and DEFAULT_HIGHLIGHT_COLOR == "노랑",
+          str(list(HIGHLIGHT_COLORS)[:3]))
+
+    check("영어로 바꾸면 영어가 나온다", i18n.tr("확인") == "OK", i18n.tr("확인"))
+    check("표에 없는 문구는 원문 유지", i18n.tr("존재하지 않는 문구") == "존재하지 않는 문구")
+    i18n.set_language("ko")
+    check("한국어로 되돌리면 원문", i18n.tr("확인") == "확인")
+    check("모르는 언어 코드는 기본값(ko)", i18n.set_language("zz") == "ko")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--gui", action="store_true", help="offscreen Qt 테스트 포함")
+    args = parser.parse_args()
+
+    tmp = tempfile.mkdtemp(prefix="serialhub_selftest_")
+    try:
+        test_logstore(tmp)
+        test_rollover(tmp)
+        test_rotation_and_marker(tmp)
+        test_review_regressions(tmp)
+        test_log_features(tmp)
+        test_concurrent_load(tmp)
+        test_redact()
+        test_filters()
+        test_probe_classification()
+        test_port_reader()
+        test_port_reader_probe()
+        test_profile(tmp)
+        test_session(tmp)
+        test_i18n()
+        if args.gui:
+            test_gui(tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    print(f"\n=== {len(PASSED)} passed, {len(FAILED)} failed ===")
+    for failure in FAILED:
+        print(f"  FAIL: {failure}")
+    return 1 if FAILED else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
