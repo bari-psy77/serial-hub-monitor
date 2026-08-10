@@ -1,229 +1,267 @@
-# Serial Hub — 포트 통합 시리얼 모니터
+[English](README.md) | [한국어](README.ko.md)
 
-VS Code Serial Monitor + Tera Term + MobaXterm 세 툴을 하나로 대체한다. 3개 콘솔
-(User CLI / Matter 로그 / Matter shell)을 한 화면에서 보고, 필터드뷰로 원하는 값만
-따로 보고, **수신을 멈추지 않고** 로그를 계속 저장한다.
+# Serial Hub — unified serial monitor
 
-## 설치 (권장)
+Replaces three tools — VS Code Serial Monitor + Tera Term + MobaXterm — with one.
+See all 3 consoles (User CLI / Matter log / Matter shell) on a single screen, watch
+just the values you care about in filtered views, and keep saving logs **without
+ever stopping reception**.
 
-`dist/SerialHub_Setup_1.2.1.exe` 를 실행하면 설치 마법사가 뜬다. Python 을 깔
-필요가 없고, **관리자 권한도 필요 없다**(기본이 사용자 단위 설치).
+## Installation (recommended)
 
-마법사 단계: 언어 → 안내 → 설치 위치 → 시작 메뉴 → **로그 저장 위치** →
-추가 아이콘 → 요약 확인 → 설치 → 완료(설치 점검·실행 선택).
+Run `dist/SerialHub_Setup_1.2.1.exe` to start the setup wizard. No Python required,
+and **no administrator rights required** (per-user install is the default).
 
-- 로그 저장 위치는 설치할 때 고른다. 기본값은 설치 폴더 아래 `logs` 이고,
-  나중에 프로그램의 [설정 → 로그 설정] 에서 바꿀 수 있다.
-- 설정·프로파일은 Windows 관례대로 `%LOCALAPPDATA%\SerialHub` 에 저장된다.
-- 제거는 [설정 → 앱] 또는 시작 메뉴의 "Serial Hub 제거". 제거할 때 설정을
-  남길지 물어보고, **수집한 로그는 지우지 않는다**(시험 증적).
+Wizard steps: language → notes → install location → Start Menu → **log location** →
+extra icons → summary → install → finish (with optional install check and launch).
 
-무인 배포:
+- You pick the log location during installation. The default is `logs` under the
+  install folder; you can change it later in [Settings → Log] inside the program.
+- Settings and profiles live in `%LOCALAPPDATA%\SerialHub`, following Windows
+  conventions.
+- Uninstall from [Settings → Apps] or the Start Menu entry "Uninstall Serial Hub".
+  The uninstaller asks whether to keep your settings, and **never deletes captured
+  logs** (they are test evidence).
+
+Unattended deployment:
 
 ```
 SerialHub_Setup_1.2.1.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
-unins000.exe /VERYSILENT /SUPPRESSMSGBOXES          # 제거 (설정은 보존)
+unins000.exe /VERYSILENT /SUPPRESSMSGBOXES          # uninstall (settings are kept)
 ```
 
-## 무설치(포터블) 실행
+## Portable use (no install)
 
-`dist/SerialHub_<날짜>.zip` 을 풀고 `SerialHub.exe` 를 실행한다. 설정을 폴더에
-같이 두고 USB 로 들고 다니려면 exe 옆에 빈 `portable.txt` 파일을 만든다.
+Unzip `dist/SerialHub_<date>.zip` and run `SerialHub.exe`. To keep the settings in
+the folder and carry it around on a USB stick, create an empty `portable.txt` file
+next to the exe.
 
 ```
-SerialHub.exe                 # 마지막 사용 프로파일로 기동
-SerialHub.exe --demo          # 포트 없이 화면만 확인 (합성 로그)
-SerialHub.exe --selfcheck     # 이 빌드가 쓸 수 있는 상태인지 점검
-SerialHub.exe --where         # 설정이 어디 저장되는지
+SerialHub.exe                 # start with the last-used profile
+SerialHub.exe --demo          # preview the UI without ports (synthetic logs)
+SerialHub.exe --selfcheck     # check that this build is usable
+SerialHub.exe --where         # show where settings are stored
 ```
 
-프로파일·설정·`crash.log` 는 **exe 옆 폴더**에 쌓인다(쓰기 금지된 위치면 자동으로
-`%LOCALAPPDATA%\SerialHub` 로 물러난다). 폴더째 복사하면 설정도 같이 간다.
+Profiles, settings and `crash.log` accumulate **next to the exe** (if that location
+is write-protected, the app automatically falls back to `%LOCALAPPDATA%\SerialHub`).
+Copy the whole folder and the settings travel with it.
 
-**새 PC 에서는 `--selfcheck` 를 먼저 돌려라.** 창 모드 exe 는 콘솔이 없어 문제가
-조용히 묻히는데, 이 명령이 pyserial COM 열거·Qt·저장 경로를 실제로 확인하고 결과를
-`selfcheck.txt` 로 남긴다. 예기치 못한 오류는 `crash.log` 에 기록된다.
+**On a new PC, run `--selfcheck` first.** A windowed exe has no console, so problems
+get buried silently — this command actually exercises pyserial COM enumeration, Qt
+and the writable paths, and leaves the results in `selfcheck.txt`. Unexpected errors
+are recorded in `crash.log`.
 
-### 다시 빌드하려면
+### Rebuilding
 
 ```bash
 python -m pip install pyinstaller
-winget install --id JRSoftware.InnoSetup            # 설치 프로그램을 만들 때만 필요
+winget install --id JRSoftware.InnoSetup            # only needed to build the installer
 
-python build_exe.py --zip        # 폴더형 exe + 포터블 zip
-python build_installer.py        # 설치 프로그램 (exe 없으면 먼저 빌드)
-python build_exe.py --onefile    # 단일 exe (기동 10초 안팎, 비권장)
+python build_exe.py --zip        # folder-style exe + portable zip
+python build_installer.py        # installer (builds the exe first if missing)
+python build_exe.py --onefile    # single exe (~10 s startup, not recommended)
 ```
 
-설치 마법사 구성은 [installer.iss](installer.iss), 설치 전 안내문은
-[installer_info.txt](installer_info.txt) 에서 고친다.
+The setup wizard is configured in [installer.iss](installer.iss); the pre-install
+notes live in [installer_info.txt](installer_info.txt).
 
-아이콘을 바꾸려면 [make_icon.py](make_icon.py) 의 도안을 수정하고 다시 돌린다 —
-`assets/serialhub.ico`(exe·설치 마법사)와 `ui/appicon.py`(창·작업표시줄)를 함께
-생성한다. 16px 은 별도 도안이라 작업표시줄에서도 뭉개지지 않는다.
+To change the icon, edit the artwork in [make_icon.py](make_icon.py) and run it
+again — it generates both `assets/serialhub.ico` (exe and installer) and
+`ui/appicon.py` (window and taskbar). The 16 px size has its own artwork so it does
+not smear in the taskbar.
 
-폴더형이 기본인 이유는 기동 속도다 — onefile 은 실행할 때마다 112MB 를 임시폴더에
-푼다. 매일 쓰는 툴에서 그 지연은 크다.
+The folder-style build is the default because of startup speed — onefile unpacks
+112 MB into a temp folder on every launch. For a tool you use every day, that delay
+matters.
 
-## 소스로 실행
+## Running from source
 
-폴더명이 곧 패키지명이라 **`serial_hub` 라는 이름으로** 클론해야 한다
-(기본 폴더명 `serial-hub-monitor` 는 파이썬 패키지명이 될 수 없다):
+The folder name is the package name, so you must clone it **as `serial_hub`**
+(the default folder name `serial-hub-monitor` is not a valid Python package name):
 
 ```bash
 git clone https://github.com/bari-psy77/serial-hub-monitor.git serial_hub
 cd serial_hub
 python -m pip install -r requirements.txt   # PySide6, pyserial
-python app.py                 # 마지막 사용 프로파일로 기동
+python app.py                 # start with the last-used profile
 python app.py --profile bench-A
-python app.py --demo          # 포트 없이 화면만 확인 (합성 로그)
+python app.py --demo          # preview the UI without ports (synthetic logs)
 ```
 
-시리얼 포트가 물려 있는 PC(무선 Windows PC)에서 실행한다. `--demo` 는 DUT 없이
-레이아웃·필터·하이라이트를 둘러보기 위한 모드로, 모든 줄에 `[DEMO]` 가 붙는다.
+Run it on the PC that has the serial ports attached (the wireless Windows PC).
+`--demo` is for exploring the layout, filters and highlighting without a DUT;
+every line is tagged `[DEMO]`.
 
-## 첫 사용 순서
+## First-use walkthrough
 
-1. 툴바의 **[🔌 연결]** — 설정 창의 연결 페이지가 뜬다.
-   맨 위 **[이 장비의 콘솔 수]** 에서 이 모델의 UART 개수(1/2/3)를 먼저 고른다.
-   그다음 포트 카드마다 COM 과 baud(기본 115200)를 고른다. COM 번호는 코드에
-   하드코딩돼 있지 않다 (벤치마다 다르기 때문). `[↻]` 로 목록을 다시 읽는다.
-2. 어느 COM 이 어느 콘솔인지 모르면 **[Probe]** 또는 **[전체 Probe]**. 실제 명령을
-   보내지 않고, 어느 콘솔에도 없는 토큰 1개를 보내 unknown-command 응답 서명으로
-   판정한다 — 오배정된 포트에서 `swtimer ... set` 같은 실명령이 실행될 위험이 없다.
-3. 포트 이름은 카드의 이름 버튼을 눌러 `MLOG`/`SHELL`/`UCLI`/직접 입력 중에 고른다.
-   지정하지 않으면 COM 번호가 그대로 이름이 된다 (`COM4`). 이름은 콘솔 제목·상태
-   필·로그 prefix 에 함께 쓰이고 프로파일에 저장된다.
-4. **[전체 연결]** 을 누르면 설정 창이 닫히고 수신이 시작된다.
-5. 파일로 남기려면 **[⏺ 로그 시작]** 을 누른다 — 저장 위치·파일명을 확인하는 창이 먼저 뜬다.
-6. **[💾 프로파일]** 에서 저장하면 다음부터 그대로 뜬다.
+1. **[🔌 Connect]** in the toolbar — the Connection page of the settings dialog
+   opens. First pick the number of UARTs this model has (1/2/3) in
+   **[Consoles on this device]** at the top. Then pick the COM port and baud rate
+   (default 115200) on each port card. COM numbers are not hardcoded anywhere
+   (they differ per bench). Press `[↻]` to refresh the list.
+2. If you don't know which COM is which console, use **[Probe]** or **[Probe all]**.
+   Probing never sends a real command — it sends one token that exists on no console
+   and identifies the role from the unknown-command reply signature, so there is no
+   risk of a real command like `swtimer ... set` running on a mis-assigned port.
+3. Set port names via the name button on each card: `MLOG`/`SHELL`/`UCLI`/custom.
+   If you don't set one, the COM number is used as-is (`COM4`). The name appears in
+   console titles, status pills and log prefixes, and is saved in the profile.
+4. Press **[Connect all]** — the settings dialog closes and reception starts.
+5. To write files, press **[⏺ Start log]** — a dialog confirming the location and
+   file names appears first.
+6. Save with **[💾 Profile]** and the app starts exactly like this next time.
 
-## 화면
+## The screen
 
-메인 창은 **모니터 하나**다. 나머지는 두 번째 줄의 아이콘 버튼과 설정 모달로 들어간다.
+The main window is **a single monitor**. Everything else lives behind the icon
+buttons on the second row and the settings modal.
 
-| 위치 | 내용 |
+| Area | Contents |
 |---|---|
-| 메인 | 상태 필 + 분할 콘솔(좌1+우2 기본) + 명령 패널 |
-| 액션 바 | 🔌 연결 · ⚙ 설정 · 🎨 규칙 · 📁 로그 · 💾 프로파일 · 🔎 필터드뷰 · ❓ 도움말 |
-| 설정 (모달) | 연결 / 규칙 / 로그 설정 / 프로파일 — 왼쪽 목록으로 이동 |
+| Main | Status pills + split consoles (1 left + 2 right by default) + command panel |
+| Action bar | 🔌 Connect · ⚙ Settings · 🎨 Rules · 📁 Log · 💾 Profile · 🔎 Filtered view · ❓ Help |
+| Settings (modal) | Connection / Rules / Log / Profile — navigate via the list on the left |
 
-설정 창의 각 페이지:
+Pages in the settings dialog:
 
-| 페이지 | 내용 |
+| Page | Contents |
 |---|---|
-| 연결 | 콘솔 수(1/2/3) · 포트 카드 (COM · baud · 이름 · Connect/↻/Probe) |
-| 규칙 | 왼쪽 서브트리 — 하이라이트 / redact / 트리거 / 저장된 필터 |
-| 로그 설정 | 저장 폴더 · 세션 접두어 · 포트별 로그명 · 병합(all) 파일명 · 회전 크기 (**[OK] 을 눌러야 반영**) |
-| 프로파일 | 저장된 프로파일 목록 · 저장 / 다른 이름으로 / 불러오기 |
-| 일반 | 화면 언어 (한국어 / English) |
+| Connection | Console count (1/2/3) · port cards (COM · baud · name · Connect/↻/Probe) |
+| Rules | Subtree on the left — highlight / redact / triggers / saved filters |
+| Log | Folder · session prefix · per-port log names · merged (all) file name · rotation size (**takes effect on [OK]**) |
+| Profile | Saved profile list · save / save as / load |
+| General | Display language (한국어 / English) |
 
-주요 단축키: `Ctrl+F` 검색, `F3`/`Shift+F3` 매치 이동, `Ctrl+K` 새 필터드뷰,
-`Ctrl+1/2/3` 콘솔 포커스, `` Ctrl+` `` 명령 입력, `Ctrl+Tab` 대상 포트 전환,
-`Ctrl+T` 타임스탬프 모드, `Ctrl+Space`(또는 `Enter`) 스크롤 정지 해제,
-`Ctrl+L` 화면 지우기, `Ctrl+S` 프로파일 저장, `F1` 사용 설명서.
+Main shortcuts: `Ctrl+F` search, `F3`/`Shift+F3` next/previous match, `Ctrl+K` new
+filtered view, `Ctrl+1/2/3` focus console, `` Ctrl+` `` command input, `Ctrl+Tab`
+cycle target port, `Ctrl+T` timestamp mode, `Ctrl+Space` (or `Enter`) release
+scroll lock, `Ctrl+L` clear view, `Ctrl+S` save profile, `F1` user guide.
 
-## 콘솔 수 — UART 가 1개·2개인 모델
+## Console count — models with 1 or 2 UARTs
 
-장비마다 시리얼 콘솔 개수가 다르다. 늘 3개를 띄우면 안 쓰는 콘솔이 화면만 차지하므로,
-**[설정 → 연결]** 맨 위에서 이 장비가 쓰는 콘솔 수를 고른다.
+Devices differ in how many serial consoles they have. Always showing three would
+waste screen space on unused consoles, so pick the number this device actually uses
+at the top of **[Settings → Connection]**.
 
-- **1개** → 콘솔 하나가 창을 꽉 채운다. **2개** → 좌우 분할. **3개** → 좌1+우2(기본).
-- 앞에서부터가 아닌 조합(예: MLOG + UCLI)은 카드의 **[이 포트 사용]** 체크박스로 고른다.
-- 끈 포트는 화면·상태 필·**명령 대상**·로그 파일·하단 카운터에서 전부 빠지고, 연결도 끊긴다.
-  COM·baud·이름 설정은 그대로 보관되므로 다시 켜면 복원된다 (스크롤백도 남아 있다).
-- **프로파일에 저장된다** — 모델별로 프로파일을 하나씩 만들어두면 열자마자 맞는 개수로 뜬다.
-  (예: `thermostat`(3), `sensor`(1))
+- **1** → one console fills the window. **2** → side-by-side split. **3** → 1 left + 2 right (default).
+- For combinations that aren't "the first N" (e.g. MLOG + UCLI), use the
+  **[Use this port]** checkbox on each card.
+- A disabled port disappears from the view, status pills, **command targets**, log
+  files and the bottom counters, and gets disconnected. Its COM, baud and name are
+  kept, so re-enabling restores it (the scrollback is still there too).
+- **Saved in the profile** — make one profile per model and it opens with the right
+  count immediately. (e.g. `thermostat` (3), `sensor` (1))
 
-## 로그 파일
+## Log files
 
-저장 위치는 **설치할 때 고른 폴더**(기본값 = 설치 폴더 아래 `logs`)이고, 프로그램의
-[설정 → 로그 설정] 에서 언제든 바꿀 수 있다. 그 아래에 날짜별 폴더가 생긴다.
+Logs go to **the folder you chose at install time** (default = `logs` under the
+install folder); you can change it any time in [Settings → Log]. Date subfolders
+are created underneath.
 
-- **수동 시작**: 연결만으로는 파일이 생기지 않는다. **[⏺ 로그 시작]** 을 눌러야 기록이 시작되고,
-  누를 때마다 **이번 기록의 저장 위치·파일명을 확인하는 창**이 먼저 뜬다 (앱을 다시 켜도 매번).
-  어디에 무슨 이름으로 남는지 모른 채 증적이 쌓이는 일을 막기 위함이다. 시작한 뒤에는 수신을
-  멈추지 않고 계속 쓴다 — "저장하려고 수신을 멈추는" 동작이 없다.
-- **[⏹ 로그 중지]** 로 언제든 파일을 닫는다. 이미 쓴 파일은 그대로 남는다.
-- **기록 멈춤/재개** (`⏸ 기록멈춤` 또는 Ctrl+P): 파일 기록만 멈춘다 — 화면·수신은
-  계속된다. 필요한 구간만 파일에 남기고 싶을 때. 멈춘 구간은 각 포트 파일에
-  `!! 기록 일시정지 …` / `!! 기록 재개 — 정지 중 N줄은 이 파일에 없다` 로 표시돼,
-  나중에 파일만 열어봐도 시간이 왜 비는지 알 수 있다.
-- **파일 이름 지정**: [설정 → 로그 설정] 에서 포트별 로그명(비우면 `mlog`/`shell`/`ucli`),
-  병합 파일명, "세션 접두어 포함" 을 한 화면에서 고른다 — 끄면 `matter.log` 처럼 고정된
-  이름으로 이어 쓴다. 결과 예시가 실시간으로 보이고, **[OK] 을 눌러야 반영된다**
-  (입력만으로 반영하면 글자 칠 때마다 빈 파일이 생긴다).
-- **빈 파일을 만들지 않는다**: 로그 파일은 그 포트에 **첫 줄이 실제로 올 때** 만든다.
-  조용한 포트는 파일 자체가 생기지 않는다.
-- **2초마다 디스크 동기화**: 기록 중에도 다른 편집기·`tail` 이 최신 내용을 바로 읽는다
-  (예전엔 파일이 0바이트로 보이다가 메모장으로 열어야 반영되는 것처럼 보였다).
-- **로그 파일 열기** (파일 → 로그 파일 열기): 현재 기록 중인 파일을 크기와 함께
-  나열하고, 여는 순간 flush 해서 마지막 줄까지 반영한다.
-- **복사본 저장** (파일 → 지금까지의 로그를 복사본으로 저장): 기록을 이어가면서
-  현재까지를 다른 폴더에 복사한다. 티켓 첨부용.
+- **Manual start**: connecting alone creates no files. Recording starts only when
+  you press **[⏺ Start log]**, and every press first shows **a dialog confirming
+  where this recording goes and what it is called** (every time, even after a
+  restart). This prevents evidence from piling up somewhere you didn't know about.
+  Once started, it keeps writing without stopping reception — there is no
+  "stop receiving to save" step.
+- **[⏹ Stop log]** closes the files at any time. What was already written stays.
+- **Pause / resume recording** (`⏸ Pause` or Ctrl+P): stops file writing only —
+  the view and reception continue. Use it to keep only the stretches you need.
+  The paused stretch is marked in each port file with
+  `!! recording paused …` / `!! recording resumed — N line(s) during the pause are
+  not in this file`, so a gap in the timestamps explains itself when you open the
+  file later.
+- **File naming**: in [Settings → Log], set the per-port log names (empty =
+  `mlog`/`shell`/`ucli`), the merged file name and "include session prefix" on one
+  page — turn the prefix off to keep appending to a fixed name like `matter.log`.
+  A live preview shows the resulting names, and **nothing applies until you press
+  [OK]** (applying as you type would create an empty file per keystroke).
+- **No empty files**: a log file is created only when **the first line actually
+  arrives** on that port. Quiet ports never produce a file.
+- **Disk sync every 2 seconds**: while recording, other editors and `tail` see the
+  latest content immediately (previously the file could look like 0 bytes until
+  opened in Notepad).
+- **Open log file** (File → Open log file): lists the files currently being written
+  with their sizes, and flushes on open so the last line is included.
+- **Save a copy** (File → Save a copy of the log so far): copies everything so far
+  to another folder while recording continues. For ticket attachments.
 
 ```
-<로그 폴더>\<MMDD>\<session>_mlog.log     [2026-08-02 01:19:12.165] <text>
-<로그 폴더>\<MMDD>\<session>_shell.log
-<로그 폴더>\<MMDD>\<session>_ucli.log
-<로그 폴더>\<MMDD>\<session>_all.log      [01:19:12 +  123.4s] [MLOG] <text>
+<log folder>\<MMDD>\<session>_mlog.log     [2026-08-02 01:19:12.165] <text>
+<log folder>\<MMDD>\<session>_shell.log
+<log folder>\<MMDD>\<session>_ucli.log
+<log folder>\<MMDD>\<session>_all.log      [01:19:12 +  123.4s] [MLOG] <text>
 ```
 
-포트별 파일은 기존 Tera Term / VS Code 저장 로그와 같은 형식, 병합 파일은 기존
-`run_*.py` transcript 와 같은 형식이라 지금까지 쓰던 grep 이 그대로 먹는다.
-장치가 보낸 제어문자(NUL 등)는 `<00>` 표기로 바꿔 기록한다 — 하나만 섞여도 편집기가
-파일 전체를 바이너리로 보고 열기를 거부하기 때문이다(흔적은 남는다).
-기록은 수신 스레드에서 라인마다 즉시 flush 하므로 GUI 가 멈추거나 강제 종료돼도
-로그가 남는다. 자정을 넘기면 새 날짜 폴더로 알아서 옮겨간다.
+Per-port files match the format of your existing Tera Term / VS Code saved logs;
+the merged file matches the existing `run_*.py` transcripts — your existing greps
+keep working. Control characters sent by the device (NUL etc.) are written as
+`<00>` — a single one is enough to make editors treat the whole file as binary and
+refuse to open it (the trace is preserved). Writing happens on the receive thread
+with a flush per line, so logs survive a frozen GUI or a force-kill. Past midnight,
+recording moves to the new date folder automatically.
 
-## 언어 (한국어 / English)
+## Language (한국어 / English)
 
-기본은 한국어다. **[설정 → 일반]** 에서 English 로 바꿀 수 있고, 이 값은 프로파일이 아니라
-사람 설정이라 `%LOCALAPPDATA%\SerialHub\settings.json` 에 남는다 (프로파일을 바꿔도 따라온다).
-**다음 실행부터 적용**되고, 번역이 없는 문구는 한국어로 나온다.
+The default is English. You can switch to 한국어 (Korean) in **[Settings → General]**;
+this is a per-person setting, not a profile setting, so it lives in
+`%LOCALAPPDATA%\SerialHub\settings.json` (it follows you across profiles).
+It **takes effect on the next start**, and any text without a translation falls
+back to Korean.
 
-번역표는 [core/i18n_en.py](core/i18n_en.py) 한 곳이다. 새 문구를 넣고 표를 안 채우면
-`selftest.py` 의 "영어 번역 누락 없음" 검사에서 걸린다 (자리표시자 `{0}` 개수도 같이 본다).
+The translation table is a single file: [core/i18n_en.py](core/i18n_en.py). If you
+add a new string and forget the table, the "no missing English translations" check
+in `selftest.py` catches it (it also compares `{0}` placeholder counts).
 
 ## redact
 
-`wifi connect <ssid> <psk>` 의 PSK, Thread `networkkey`, `pskc` 는 기본 룰로
-마스킹된다. **마스킹은 화면·로그 파일·프로파일 JSON 공통이고, 시리얼로 나가는 것만
-원문**이다. 프로파일은 벤치 간 복사·공유용이라 명령 히스토리와 스크래치패드도 저장 시
-마스킹된다. 룰은 [설정 → 규칙 → redact] 에서 편집하고, regex 를 끄면 리터럴로 찾는다(비밀번호에
-정규식 메타문자가 있을 때). 정규식이 깨진 룰은 상태바에 경고가 뜬다 — 조용히
-무력화되면 평문이 그대로 기록되기 때문이다.
+The PSK in `wifi connect <ssid> <psk>`, Thread `networkkey` and `pskc` are masked
+by the default rules. **Masking applies to the view, the log files and the profile
+JSON alike; only what goes out over the serial line is unmasked.** Profiles are
+meant to be copied and shared between benches, so command history and the
+scratchpad are masked on save too. Edit the rules in [Settings → Rules → redact];
+turn regex off to match literally (for passwords containing regex metacharacters).
+A rule with a broken regex raises a warning in the status bar — silently disabling
+it would let plaintext through to the files.
 
-**한계**: redact 는 저장되는 라인 단위로 적용된다. 비밀값이 라인 경계로 쪼개지면
-(연결 직후 중간부터 받은 첫 줄, 개행 없는 프롬프트의 부분 flush) 룰이 매치하지
-못한다. 라인을 모아두면 "즉시 기록"이 깨지므로 감수한 트레이드오프다 — 로그를 외부에
-첨부하기 전 `wifi connect` 근처를 한 번 훑어라.
+**Limitation**: redact is applied per stored line. If a secret is split across a
+line boundary (the first partial line right after connecting, a partial flush of a
+prompt with no newline), the rule cannot match. Buffering lines would break
+"write immediately", so this is an accepted trade-off — skim around `wifi connect`
+before attaching a log externally.
 
-## 벤치 편의 기능
+## Bench conveniences
 
-- **마커** (`📍` 버튼 / Ctrl+M): 로그에 `### …` 구분 줄을 넣는다 — Jira 첨부 로그에서
-  "여기부터 재현" 을 표시. 병합 파일과 `_mark.log` 에 남는다.
-- **세션 분절** (파일 → Ctrl+N): 연결을 유지한 채 지금부터를 새 로그 파일로 받는다 —
-  티켓엔 작은 파일만 첨부.
-- **트리거** ([설정 → 규칙 → 트리거]): `WDOG`/`MemManage`/`HardFault` 기본 감시. 매치 횟수·최근
-  시각이 Monitor 의 `⚡` 칩에 집계된다 — 밤샘 수집에서 새벽에 지나간 이벤트 확인용.
-- **크기 회전**: 병합 파일이 200MB 를 넘으면 `_p2`, `_p3` … 로 자동 분절 (자정
-  날짜-폴더 전환과 별개).
-- **줌/줄바꿈**: Ctrl+= / Ctrl+- / Ctrl+0, 보기 → 줄바꿈.
-- **펌웨어 로그 색**: 장치가 보낸 ANSI 색을 화면에 그대로 살린다 (보기 → 펌웨어 로그 색
-  표시로 끌 수 있음). **로그 파일에는 색 코드가 들어가지 않는다** — grep·Jira 첨부는
-  깨끗한 본문 그대로다. redact 로 마스킹된 줄은 글자 위치가 바뀌므로 색을 버린다.
-- **버퍼 지우기**: 콘솔 헤더의 `🗑` = 그 콘솔 화면만, 상단 `🗑 버퍼` = 전 콘솔 화면 +
-  메모리 버퍼(Ctrl+Shift+L). **로그 파일은 어느 쪽도 지우지 않는다.**
-- **창 분리**: 콘솔 헤더의 `⧉` (또는 Ctrl+D) 로 콘솔을 별도 창으로 뺀다 — 멀티 모니터에
-  MLOG 를 크게 띄워두는 용도. 창을 닫으면 원래 자리로 돌아온다
-  (보기 → 분리한 창 모두 복귀).
+- **Markers** (`📍` button / Ctrl+M): inserts a `### …` separator line into the log —
+  to mark "reproduction starts here" in a Jira attachment. Written to the merged
+  file and `_mark.log`.
+- **Session split** (File → Ctrl+N): starts a new log file from now on while
+  staying connected — attach only a small file to the ticket.
+- **Triggers** ([Settings → Rules → Triggers]): `WDOG`/`MemManage`/`HardFault`
+  watched by default. Hit counts and the last-seen time are tallied in the
+  monitor's `⚡` chip — for spotting events that flew by at 3 AM during an
+  overnight capture.
+- **Size rotation**: the merged file splits into `_p2`, `_p3` … past 200 MB
+  (separate from the midnight date-folder rollover).
+- **Zoom / word wrap**: Ctrl+= / Ctrl+- / Ctrl+0, View → Word wrap.
+- **Firmware log colors**: ANSI colors sent by the device are rendered on screen
+  (toggle via View → Show firmware log colors). **Color codes never go into the
+  log files** — grep and Jira attachments get clean text. Redacted lines drop their
+  colors because masking shifts character positions.
+- **Clearing buffers**: `🗑` in a console header = that console's view only;
+  `🗑 Buffer` at the top = every console view + the memory buffer (Ctrl+Shift+L).
+  **Neither touches the log files.**
+- **Pop-out windows**: `⧉` in a console header (or Ctrl+D) moves a console into its
+  own window — e.g. MLOG enlarged on a second monitor. Closing the window docks it
+  back (View → Dock all popped-out windows).
 
-## 자동화 브리지 (외부 스크립트 연동)
+## Automation bridge (external scripts)
 
-COM 은 한 프로그램만 잡는다 — hub 실행 중엔 `serport.py`/`run_*.py` 가 포트를 못 연다.
-그래서 hub 가 `127.0.0.1:3341` (JSON Lines, 프로파일 `bridge_port` 로 변경/0=끔) 로
-문을 열어 둔다. 외부 스크립트는 포트 대신 hub 를 거친다:
+A COM port belongs to one program — while the hub is running, `serport.py` /
+`run_*.py` cannot open the ports. So the hub listens on `127.0.0.1:3341`
+(JSON Lines; change via the profile's `bridge_port`, 0 = off). External scripts go
+through the hub instead of the port:
 
 ```python
 from serial_hub.hub_client import HubClient
@@ -234,40 +272,43 @@ with HubClient() as hub:
 
 CLI: `python hub_client.py status | send SHELL "otcli state" | marker "..." | tail MLOG`
 
-## 문제가 생기면 (진단 로그)
+## When something goes wrong (diagnostics)
 
-앱은 자기 동작을 `app.log` 에 남긴다 (연결/재접속/probe 판정/기록 실패/예외,
-1MB×3 회전). **도움말 → 진단 폴더 열기** 로 폴더를 열어 `app.log` + `crash.log` 를
-그대로 전달하면 사후 분석이 된다.
+The app records its own behavior in `app.log` (connects/reconnects/probe verdicts/
+write failures/exceptions, 1 MB × 3 rotation). Open the folder via
+**Help → Open diagnostics folder** and hand over `app.log` + `crash.log` as-is for
+post-mortem analysis.
 
-## 포트가 안 열릴 때
+## When a port won't open
 
-COM 은 한 프로그램만 잡을 수 있다. 열기에 실패하면 설정 → 연결의 포트 카드가 점유 후보
-프로세스를 보여준다(휴리스틱 — 이 환경엔 `handle.exe` 가 없다). Tera Term /
-VS Code Serial Monitor / 예전 `run_*.py` 를 닫고 다시 [Connect].
+A COM port belongs to one program. When opening fails, the port card in
+Settings → Connection shows candidate holding processes (a heuristic — this
+environment has no `handle.exe`). Close Tera Term / VS Code Serial Monitor / an
+old `run_*.py` and press [Connect] again.
 
-## 셀프테스트
+## Self-test
 
 ```bash
-python selftest.py          # core (하드웨어 불필요)
-python selftest.py --gui    # offscreen Qt 포함
+python selftest.py          # core (no hardware needed)
+python selftest.py --gui    # includes offscreen Qt
 ```
 
-가짜 시리얼 포트로 라인 조립 · 부분 라인 · 자동 재접속 · 송신 · redact · probe 판정 ·
-프로파일 왕복 · 필터드뷰 · 20k 라인 부하까지 검증한다. 실기 검증(설계 §8 의 2~6)은
-이 스크립트로 대체되지 않는다.
+Verifies line assembly, partial lines, auto-reconnect, sending, redact, probe
+verdicts, profile round-trips, filtered views and a 20k-line load — all against a
+fake serial port. On-device verification (design doc §8, items 2–6) is not replaced
+by this script.
 
-## 구조
+## Layout
 
 ```
-core/          Qt 를 모르는 계층 — logstore(ring+파일) · port(수신 스레드) · filters ·
-               config(프로파일) · portscan(열거/점유/probe) · session(오케스트레이터)
-ui/            PySide6 표시 계층 — 50ms QTimer 1개가 모든 뷰를 pump 한다
-               main_window(모니터+액션바) · settings_dialog(연결/규칙/로그/프로파일 모달)
-app.py         엔트리포인트 (소스 실행용)
-launcher.py    PyInstaller 진입점 — app.py 를 직접 얼리면 상대 임포트를 못 따라가
-               패키지가 번들에서 빠진다
-build_exe.py   실행파일 빌드
-selftest.py    하드웨어 없는 검증 (core)
-uitest.py      가상 3콘솔로 GUI 시나리오 자동검증
+core/          The Qt-free layer — logstore (ring+files) · port (receive thread) · filters ·
+               config (profiles) · portscan (enumeration/holders/probe) · session (orchestrator)
+ui/            PySide6 display layer — a single 50 ms QTimer pumps every view
+               main_window (monitor+action bar) · settings_dialog (connection/rules/log/profile modal)
+app.py         Entry point (for running from source)
+launcher.py    PyInstaller entry point — freezing app.py directly breaks relative imports
+               and drops the package from the bundle
+build_exe.py   Executable build
+selftest.py    Hardware-free verification (core)
+uitest.py      Automated GUI scenarios against a virtual 3-console DUT
 ```

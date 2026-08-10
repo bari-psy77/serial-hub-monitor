@@ -73,6 +73,7 @@ Source: "dist\SerialHub\*"; DestDir: "{app}"; \
     Excludes: "profiles\*,*.log,selfcheck.txt,where.txt"; \
     Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "README.md"; DestDir: "{app}"; DestName: "README.md"; Flags: ignoreversion
+Source: "README.ko.md"; DestDir: "{app}"; DestName: "README.ko.md"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
