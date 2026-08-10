@@ -430,7 +430,8 @@ def test_log_features(tmp: str) -> None:
     check("멈춤 전후는 파일에 있다", "recorded 1" in body and "recorded 2" in body)
     check("멈춘 구간은 파일에 없다", "while paused" not in body)
     check("멈춤/재개가 그 포트 파일에도 표시된다 (공백 오해 방지)",
-          "일시정지" in body and "재개" in body, body[-200:])
+          ("일시정지" in body or "paused" in body)
+          and ("재개" in body or "resumed" in body), body[-200:])
 
     # 포트별 파일명 + 세션 접두어 옵션
     store3 = LogStore()
@@ -711,6 +712,14 @@ def test_profile(tmp: str) -> None:
             config_mod.DATA_DIR = original_data
         check("기존 프로파일의 로그 위치는 설치값이 덮어쓰지 않는다",
               Profile.from_dict({"log_base_dir": r"E:\kept"}).log_base_dir == r"E:\kept")
+
+        # 화면 언어: 설정이 없으면 영어가 기본, settings.json 에 적어둔 값은 그대로 존중
+        config_mod.save_settings({})
+        check("언어 미지정이면 기본값은 영어", config_mod.language() == "en", config_mod.language())
+        config_mod.save_settings({"language": "ko"})
+        check("settings.json 에 명시한 언어는 기본값과 무관하게 유지된다",
+              config_mod.language() == "ko", config_mod.language())
+        config_mod.save_settings({})
 
         broken = Profile.path_for("broken")
         os.makedirs(config_mod.PROFILE_DIR, exist_ok=True)
@@ -1094,7 +1103,8 @@ def test_i18n() -> None:
     check("표에 없는 문구는 원문 유지", i18n.tr("존재하지 않는 문구") == "존재하지 않는 문구")
     i18n.set_language("ko")
     check("한국어로 되돌리면 원문", i18n.tr("확인") == "확인")
-    check("모르는 언어 코드는 기본값(ko)", i18n.set_language("zz") == "ko")
+    check("기본 언어는 영어다", i18n.DEFAULT_LANGUAGE == "en", i18n.DEFAULT_LANGUAGE)
+    check("모르는 언어 코드는 기본값(en)", i18n.set_language("zz") == "en")
 
 
 def main() -> int:

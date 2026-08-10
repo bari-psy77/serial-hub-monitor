@@ -340,8 +340,11 @@ def save_settings(data: dict) -> None:
 
 
 def language() -> str:
-    """화면 언어 — 프로파일이 아니라 **사람** 설정이라 settings.json 에 둔다."""
-    return str(load_settings().get("language", "ko"))
+    """화면 언어 — 프로파일이 아니라 **사람** 설정이라 settings.json 에 둔다.
+
+    기본값은 영어. settings.json 에 언어를 이미 적어둔 사용자는 그 값이 그대로 유지된다.
+    """
+    return str(load_settings().get("language", "en"))
 
 
 def set_language(lang: str) -> None:

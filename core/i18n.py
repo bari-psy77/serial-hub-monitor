@@ -1,4 +1,4 @@
-"""화면 문구 번역 — 한국어(기본) / 영어.
+"""화면 문구 번역 — 한국어 / 영어(기본값).
 
 방식은 gettext 와 같다. **소스에 적힌 한국어 문장이 곧 키**이고, 영어는
 `EN` 표에서 찾는다. 표에 없으면 한국어를 그대로 돌려주므로, 번역이 빠져도
@@ -15,7 +15,7 @@ f-string 은 값이 박힌 뒤라 키로 쓸 수 없다.
 from __future__ import annotations
 
 LANGUAGES = {"ko": "한국어", "en": "English"}
-DEFAULT_LANGUAGE = "ko"
+DEFAULT_LANGUAGE = "en"
 
 _current = DEFAULT_LANGUAGE
 
