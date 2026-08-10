@@ -259,6 +259,18 @@ python selftest.py --gui    # offscreen Qt 포함
 프로파일 왕복 · 필터드뷰 · 20k 라인 부하까지 검증한다. 실기 검증(설계 §8 의 2~6)은
 이 스크립트로 대체되지 않는다.
 
+## CI
+
+GitHub Actions([.github/workflows/ci.yml](.github/workflows/ci.yml))가 `main` push 와 `main` 대상
+PR 에서 ubuntu-latest · Python 3.12 로 돈다(스케줄 실행 없음). `requirements.txt` 와 PySide6 휠이
+요구하는 Qt 시스템 라이브러리(`libegl1`·`libgl1`·`libxkbcommon0`·`libdbus-1-3`·`libfontconfig1`)를
+설치한 뒤 셀프테스트 양쪽을 모두 돌린다 — `python selftest.py` 와 `QT_QPA_PLATFORM=offscreen` 상태의
+`python selftest.py --gui`.
+
+체크아웃 폴더 이름을 일부러 `serial_hub` 로 고정한다: `selftest.py` 가 `__package__ = "serial_hub"` 로
+상대 임포트를 하므로 **체크아웃 폴더 이름이 곧 패키지 이름**이기 때문이다(원격 저장소명은
+serial-hub-monitor). `uitest.py` 는 리눅스 offscreen 통과 여부가 확인되지 않아 CI 에 넣지 않았다.
+
 ## 구조
 
 ```

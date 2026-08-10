@@ -1,0 +1,62 @@
+name: CI
+
+# 트리거는 main push / main 대상 PR 뿐이다.
+# 스케줄(cron)은 두지 않는다 — 프라이빗 레포 무료 분(minutes) 예산을 지키기 위함.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  selftest:
+    name: selftest (core + offscreen GUI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: serial_hub
+    env:
+      # selftest.py 도 GUI 구간에서 setdefault 로 같은 값을 넣지만, core 구간에서도
+      # ui.main_window(PySide6 QtWidgets)를 임포트하므로 잡 전체에 걸어둔다.
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      # ⚠️ 반드시 `serial_hub` 라는 이름의 폴더로 체크아웃한다.
+      #    selftest.py 는 `__package__ = "serial_hub"` 로 상대 임포트(`from .core ...`)를 하고
+      #    상위 폴더를 sys.path 에 넣는다 → **체크아웃 폴더 이름이 곧 패키지 이름**이다.
+      #    이 저장소의 원격 이름은 serial-hub-monitor 라, 기본 경로로 두면
+      #    ModuleNotFoundError: No module named 'serial_hub' 로 죽는다.
+      - name: Check out repository into serial_hub/
+        uses: actions/checkout@v4
+        with:
+          path: serial_hub
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: serial_hub/requirements.txt
+
+      # PySide6 휠은 Qt 를 동봉하지만 시스템 라이브러리 몇 개는 러너에 없다.
+      # offscreen 플랫폼에도 libQt6Gui 가 EGL/GL/xkbcommon 을 링크하므로 필요하다.
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run self-test (core)
+        run: python selftest.py
+
+      # GUI 절반도 돌린다 — offscreen 이라 디스플레이가 필요 없다.
+      # selftest.py 는 실패 시 exit 1 을 돌려주므로 별도 판정 로직이 필요 없다.
+      - name: Run self-test (GUI, offscreen)
+        run: python selftest.py --gui
+
+      # uitest.py(가상 3콘솔 GUI 시나리오)는 CI 에 넣지 않았다 —
+      # 로컬 검증 목록에 없어 리눅스 offscreen 통과 여부가 확인되지 않았기 때문이다.

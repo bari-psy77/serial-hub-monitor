@@ -298,6 +298,18 @@ verdicts, profile round-trips, filtered views and a 20k-line load — all agains
 fake serial port. On-device verification (design doc §8, items 2–6) is not replaced
 by this script.
 
+## CI
+
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on pushes to `main`
+and on pull requests targeting `main` — ubuntu-latest, Python 3.12, no scheduled runs. It installs
+`requirements.txt` plus the Qt runtime libraries the wheels expect (`libegl1`, `libgl1`,
+`libxkbcommon0`, `libdbus-1-3`, `libfontconfig1`), then runs both halves of the self-test:
+`python selftest.py` and `python selftest.py --gui` with `QT_QPA_PLATFORM=offscreen`.
+
+The workflow checks the repository out into a folder named `serial_hub` on purpose: `selftest.py`
+imports relatively via `__package__ = "serial_hub"`, so the checkout folder name *is* the package
+name. `uitest.py` is not in CI — it has not been verified under Linux/offscreen.
+
 ## Layout
 
 ```
