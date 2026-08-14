@@ -52,6 +52,10 @@ def build(onefile: bool, clean: bool) -> int:
         "--specpath", HERE,
         "--hidden-import", "serial.tools.list_ports",
         "--hidden-import", "serial.tools.list_ports_windows",
+        # 내장 터미널 — core/terminal.py 가 임포트를 가드하고 있어 정적 분석이 놓친다
+        "--hidden-import", "winpty",
+        "--hidden-import", "pyte",
+        "--collect-all", "winpty",    # ConPTY 네이티브 모듈(.pyd) 동봉
     ]
     # 사용 설명서(한/영)를 exe 옆 docs\ 로 같이 넣는다 — 도움말(F1)이 언어 설정에 맞는 쪽을 연다
     guides = [os.path.join(HERE, "docs", name)

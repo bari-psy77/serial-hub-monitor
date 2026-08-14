@@ -662,6 +662,69 @@ attachments)</li>
 one click</li>
 </ul>""")
 
+    section("로그 불러오기 — 지난 로그 분석", """
+<p><b>파일 › 로그 파일 열기(뷰어)…</b> 로 예전에 기록한 로그 파일을 불러와 분석한다.
+포트별 파일·병합 파일 형식은 타임스탬프와 출처를 그대로 복원하고, 모르는 형식의
+텍스트 파일도 원문 그대로 열린다.</p>
+<ul>
+<li>필터드뷰와 같은 검색(부분일치 / 정규식 / 대소문자)과 하이라이트를 그대로 쓴다</li>
+<li>여러 파일을 한 번에 열면 <b>시간순으로 병합</b>되고, 파일별 체크박스로 골라 본다</li>
+<li>[파일 추가] 로 열린 창에 계속 합칠 수 있고, [결과 저장] 은 보이는 결과만 저장한다</li>
+<li>뷰어는 <b>메인 창 하단에 도킹</b>되며, 제목줄을 끌면 독립 창이 된다. 여러 개를 열면
+탭으로 묶인다</li>
+<li>합계 200MB 를 넘는 묶음은 불러오기 전에 한 번 확인을 받는다</li>
+</ul>
+<div class="note">파일은 읽기만 하고 잠그지 않으므로, 기록 중인 파일도 열어볼 수 있습니다.</div>""",
+            "Opening past logs — the log viewer", """
+<p><b>File › Open log files (viewer)…</b> loads previously recorded logs for analysis.
+Per-port and merged files come back with their timestamps and sources restored; text
+files in unknown formats still open as plain text.</p>
+<ul>
+<li>The same search tools as filtered views (substring / regex / case) plus highlights</li>
+<li>Open several files at once and they are <b>merged in time order</b>, with a checkbox
+per source</li>
+<li><b>Add files</b> keeps merging into the same window; <b>Save result</b> writes only
+what is currently shown</li>
+<li>The viewer <b>docks at the bottom of the main window</b>; drag its title bar to float
+it as a separate window. Multiple viewers stack as tabs</li>
+<li>Batches over 200 MB ask once before loading everything</li>
+</ul>
+<div class="note">Files are only read, never locked — you can open a file that is still
+being recorded.</div>""")
+
+    section("내장 터미널 — PowerShell 을 같은 창에서", """
+<p><b>보기 › 터미널 열기</b> — 진짜 터미널(ConPTY)이 메인 창 하단 도크로 열린다.
+색·커서 이동·화면 지움까지 그대로라 일반 명령은 물론 대부분의 콘솔 프로그램이 돈다.
+제목줄을 끌면 독립 창이 되고, 여러 개를 열 수 있다.</p>
+<ul>
+<li>기본 셸은 <b>PowerShell</b>, 시작 위치는 사용자 홈 폴더</li>
+<li><kbd>Ctrl</kbd>+<kbd>V</kbd> 붙여넣기, <kbd>PageUp</kbd>/<kbd>PageDown</kbd> 스크롤백,
+우클릭 메뉴에서 화면 전체 복사·재시작</li>
+<li>셸이 종료되면 종료 코드를 배너로 보여주고 [재시작] 으로 새 셸을 연다</li>
+<li>도크를 닫으면 셸 프로세스도 함께 끝난다 — 백그라운드에 남지 않는다</li>
+</ul>
+<div class="warn"><b>관리자 모드</b> — UAC 로 승격된 셸은 보안 경계 때문에 창 안에 넣을 수
+없습니다. [관리자 PowerShell (외부 창)] 버튼이 승격된 PowerShell 을 별도 창으로 띄웁니다.</div>
+<div class="note">터미널 화면은 시리얼 로그 파일에 기록되지 않습니다 — 시리얼 경로와 완전히
+분리돼 있습니다.</div>""",
+            "Embedded terminal — PowerShell in the same window", """
+<p><b>View › Open terminal</b> — a real terminal (ConPTY) opens as a bottom dock in the
+main window. Colors, cursor movement and screen clearing all work, so most console
+programs run as-is. Drag the title bar to float it; several can be open at once.</p>
+<ul>
+<li>The default shell is <b>PowerShell</b>, starting in your home folder</li>
+<li><kbd>Ctrl</kbd>+<kbd>V</kbd> pastes, <kbd>PageUp</kbd>/<kbd>PageDown</kbd> scroll
+history, and the right-click menu offers copy-whole-screen and restart</li>
+<li>When the shell exits, its exit code is shown as a banner and [Restart] opens a fresh
+shell</li>
+<li>Closing the dock also ends the shell process — nothing lingers in the background</li>
+</ul>
+<div class="warn"><b>Admin mode</b> — an elevated (UAC) shell cannot be embedded across the
+security boundary. The [Admin PowerShell (external window)] button launches an elevated
+PowerShell as a separate window.</div>
+<div class="note">The terminal screen is never written to the serial log files — it is
+fully separate from the serial path.</div>""")
+
     section("설정 › 규칙 — 하이라이트·마스킹·트리거", f"""
 {img('rules', '설정 > 규칙 — 왼쪽 트리로 하이라이트 / redact / 트리거 / 저장된 필터')}
 <p>왼쪽 서브트리에서 <b>하이라이트 / redact / 트리거 / 저장된 필터</b> 중 하나를 고른다.

@@ -5,7 +5,8 @@
 Replaces three tools — VS Code Serial Monitor + Tera Term + MobaXterm — with one.
 See all 3 consoles (User CLI / Matter log / Matter shell) on a single screen, watch
 just the values you care about in filtered views, and keep saving logs **without
-ever stopping reception**.
+ever stopping reception**. Reopen past log files in a viewer for analysis, and use
+a PowerShell terminal inside the same window.
 
 ## Installation (recommended)
 
@@ -83,7 +84,7 @@ The folder name is the package name, so you must clone it **as `serial_hub`**
 ```bash
 git clone https://github.com/bari-psy77/serial-hub-monitor.git serial_hub
 cd serial_hub
-python -m pip install -r requirements.txt   # PySide6, pyserial
+python -m pip install -r requirements.txt   # PySide6, pyserial, pyte, pywinpty
 python app.py                 # start with the last-used profile
 python app.py --profile bench-A
 python app.py --demo          # preview the UI without ports (synthetic logs)
@@ -156,8 +157,9 @@ at the top of **[Settings → Connection]**.
 ## Log files
 
 Logs go to **the folder you chose at install time** (default = `logs` under the
-install folder); you can change it any time in [Settings → Log]. Date subfolders
-are created underneath.
+install folder); you can change it any time in [Settings → Log]. By default files
+are written directly into that folder; turn on "Save into per-date (MMDD)
+subfolders" to nest them by date.
 
 - **Manual start**: connecting alone creates no files. Recording starts only when
   you press **[⏺ Start log]**, and every press first shows **a dialog confirming
@@ -166,6 +168,9 @@ are created underneath.
   Once started, it keeps writing without stopping reception — there is no
   "stop receiving to save" step.
 - **[⏹ Stop log]** closes the files at any time. What was already written stays.
+- **If files with the same name already exist**, you are asked before recording
+  starts — **Overwrite / Append / Cancel**, with the safe Append as the default
+  button (the automation bridge path keeps appending without asking).
 - **Pause / resume recording** (`⏸ Pause` or Ctrl+P): stops file writing only —
   the view and reception continue. Use it to keep only the stretches you need.
   The paused stretch is marked in each port file with
@@ -188,11 +193,13 @@ are created underneath.
   to another folder while recording continues. For ticket attachments.
 
 ```
-<log folder>\<MMDD>\<session>_mlog.log     [2026-08-02 01:19:12.165] <text>
-<log folder>\<MMDD>\<session>_shell.log
-<log folder>\<MMDD>\<session>_ucli.log
-<log folder>\<MMDD>\<session>_all.log      [01:19:12 +  123.4s] [MLOG] <text>
+<log folder>\<session>_mlog.log     [2026-08-02 01:19:12.165] <text>
+<log folder>\<session>_shell.log
+<log folder>\<session>_ucli.log
+<log folder>\<session>_all.log      [01:19:12 +  123.4s] [MLOG] <text>
 ```
+
+(With the date-subfolder option on, they go under `<log folder>\<MMDD>\` instead.)
 
 Per-port files match the format of your existing Tera Term / VS Code saved logs;
 the merged file matches the existing `run_*.py` transcripts — your existing greps
@@ -200,7 +207,30 @@ keep working. Control characters sent by the device (NUL etc.) are written as
 `<00>` — a single one is enough to make editors treat the whole file as binary and
 refuse to open it (the trace is preserved). Writing happens on the receive thread
 with a flush per line, so logs survive a frozen GUI or a force-kill. Past midnight,
-recording moves to the new date folder automatically.
+recording moves on to the new day's files automatically (a new MMDD folder when
+date subfolders are on, otherwise the new date is appended to the file names).
+
+## Opening past logs (viewer)
+
+**File → Open log files (viewer)…** reopens previous logs for analysis. Per-port
+and merged files come back with timestamps and sources restored; unknown text
+formats still open as plain text. You get the same search tools as filtered views
+(substring/regex/case), highlights and save-result. Opening several files merges
+them in time order with a checkbox per source. The viewer docks at the bottom of
+the main window; drag its title bar to float it — multiple viewers stack as tabs.
+Files are only read, never locked, so you can open a file that is still being
+recorded.
+
+## Embedded terminal (PowerShell)
+
+**View → Open terminal** — a real ConPTY terminal opens as a bottom dock (colors,
+cursor movement and screen clearing all work; pywinpty + pyte). The default shell
+is PowerShell starting in your home folder. `Ctrl+V` pastes, `PageUp`/`PageDown`
+scroll history, and the right-click menu offers copy-whole-screen and restart.
+Closing the dock also ends the shell process. **Admin mode**: an elevated (UAC)
+shell cannot be embedded, so the [Admin PowerShell (external window)] button
+launches an elevated window separately. The terminal screen is never written to
+the serial log files.
 
 ## Language (한국어 / English)
 
