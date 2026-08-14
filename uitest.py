@@ -1075,6 +1075,27 @@ def main() -> int:  # noqa: PLR0915
               os.path.exists(os.path.join(over_dir, day, "fixed.log")),
               str(os.listdir(over_dir)))
 
+        # ------------------------------------------------- S8c 로그 뷰어 (과거 파일 분석)
+        print("\n== S8c. 로그 뷰어 — 기록한 파일 다시 열기 ==")
+        store.flush()
+        dock = window.open_log_viewer([fixed_path])
+        spin(app, 0.4)
+        check("뷰어 도크가 열린다", dock is not None and dock in window.viewer_docks)
+        vtext = dock.viewer.pane.view.toPlainText()
+        check("기록했던 내용이 뷰어에 보인다", "fresh by uitest" in vtext, vtext[:200])
+        dock.viewer.edit.setText("auto append")
+        dock.viewer._refresh_timer.stop()
+        dock.viewer._refresh_pane()
+        spin(app, 0.2)
+        vtext = dock.viewer.pane.view.toPlainText()
+        check("뷰어 필터가 동작한다",
+              "auto append" in vtext and "fresh by uitest" not in vtext, vtext[:200])
+        dock.setFloating(True)
+        check("도크는 떼어내 독립 창이 된다 (플로팅)", dock.isFloating())
+        dock.close()
+        spin(app, 0.3)
+        check("도크를 닫으면 목록에서 빠진다", dock not in window.viewer_docks)
+
         # ---------------------------------------------------------- S9 종료·파일 검증
         print("\n== S9. 종료 — 로그 파일·진단 로그 ==")
         # 경로를 재구성하지 말고 store 가 실제로 쓰고 있는 경로를 쓴다

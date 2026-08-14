@@ -555,6 +555,73 @@ def test_log_dir_options(tmp: str) -> None:
           "fresh line" in body and "appended line" in body, repr(body))
 
 
+def test_logfile_viewer(tmp: str) -> None:
+    print("\n== 로그 파일 불러오기 (파서·읽기 전용 스토어) ==")
+    from .core.logfile import LogFileStore, parse_log_file
+
+    vdir = os.path.join(tmp, "viewer")
+    os.makedirs(vdir, exist_ok=True)
+    port_path = os.path.join(vdir, "bench_mlog.log")
+    with open(port_path, "w", encoding="utf-8") as fh:
+        fh.write("[2026-08-02 01:19:12.165] boot banner\n"
+                 "[2026-08-02 01:19:12.700] >>> otcli state\n"
+                 "banner without timestamp\n")
+    merged_path = os.path.join(vdir, "bench_all.log")
+    with open(merged_path, "w", encoding="utf-8") as fh:
+        fh.write("[01:19:12 +   0.1s] [MLOG] boot banner\n"
+                 "[01:19:13 +   1.1s] [SHELL] Done\n"
+                 "[01:19:14 +   2.1s] [MARK] ### cycle 1\n")
+    plain_path = os.path.join(vdir, "notes.txt")
+    with open(plain_path, "w", encoding="utf-8") as fh:
+        fh.write("first plain line\nsecond plain line\n")
+
+    parsed = parse_log_file(port_path)
+    check("포트 파일 형식 인식", parsed.fmt == "port", parsed.fmt)
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(parsed.entries[0].t_wall))
+    check("포트 파일 t_wall 복원", stamp == "2026-08-02 01:19:12", stamp)
+    check("밀리초 복원", abs(parsed.entries[0].t_wall % 1 - 0.165) < 0.01)
+    check("TX 라인 인식 + >>> 는 본문에서 뗀다",
+          parsed.entries[1].is_tx and parsed.entries[1].text == "otcli state")
+    check("형식 밖의 줄은 plain 으로 살린다",
+          parsed.entries[2].text == "banner without timestamp")
+
+    merged = parse_log_file(merged_path)
+    check("병합 파일 형식 인식", merged.fmt == "merged", merged.fmt)
+    check("병합 라인 출처 복원", [e.source for e in merged.entries] == ["MLOG", "SHELL", "MARK"])
+    check("plain 형식 열화", parse_log_file(plain_path).fmt == "plain")
+
+    store = LogFileStore()
+    errors = store.add_files([port_path, merged_path, plain_path,
+                              os.path.join(vdir, "missing.log")])
+    check("실패 파일은 예외가 아니라 보고 목록", len(errors) == 1 and "missing" in errors[0][0],
+          str(errors))
+    check("소스 키 — 파일 stem + 병합 포트",
+          set(store.sources()) == {"bench_mlog", "MLOG", "SHELL", "MARK", "notes"},
+          str(store.sources()))
+    lines = store.pull(-1)
+    check("전 소스 합산 라인 수", len(lines) == 8, str(len(lines)))
+    check("seq 는 1..N 단조", [ln.seq for ln in lines] == list(range(1, 9)))
+    check("t_wall 오름차순 정렬",
+          all(a.t_wall <= b.t_wall for a, b in itertools.pairwise(lines)))
+    check("소스 필터 pull", [ln.text for ln in store.pull(-1, ["SHELL"])] == ["Done"])
+    result = store.pull_with_gap(-1, ["bench_mlog"], limit=2)
+    check("limit 은 최신 쪽을 남기고 생략 개수를 알린다",
+          len(result.lines) == 2 and result.skipped == 1, str(result))
+    check("counters", store.counters()["bench_mlog"] == 3, str(store.counters()))
+
+    # 같은 stem 을 한 번 더 추가하면 (2) 로 구분된다
+    dup_dir = os.path.join(vdir, "dup")
+    os.makedirs(dup_dir, exist_ok=True)
+    dup_path = os.path.join(dup_dir, "bench_mlog.log")
+    with open(dup_path, "w", encoding="utf-8") as fh:
+        fh.write("[2026-08-03 09:00:00.000] second bench\n")
+    store.add_files([dup_path])
+    check("겹치는 파일 소스는 (2) 로 구분", "bench_mlog(2)" in store.sources(),
+          str(store.sources()))
+    check("추가 후에도 seq 1..N 재부여",
+          [ln.seq for ln in store.pull(-1)] == list(range(1, 10)))
+
+
 def test_redact() -> None:
     print("\n== redact ==")
     redactor = Redactor([
@@ -962,6 +1029,59 @@ def test_gui(tmp: str) -> None:
     log_page.revert()
     check("revert 하면 프로파일 값으로 되돌아간다", log_page.date_folder_box.isChecked())
 
+    # 로그 뷰어 — 과거 파일을 열어 검색·필터 (스펙 2026-08-14)
+    from .ui import log_viewer as log_viewer_mod
+    vdir = os.path.join(tmp, "gui-viewer")
+    os.makedirs(vdir, exist_ok=True)
+    vport = os.path.join(vdir, "old_mlog.log")
+    with open(vport, "w", encoding="utf-8") as fh:
+        fh.write("[2026-08-02 01:00:00.000] alpha line\n"
+                 "[2026-08-02 01:00:01.000] beta line\n")
+    vmerged = os.path.join(vdir, "old_all.log")
+    with open(vmerged, "w", encoding="utf-8") as fh:
+        fh.write("[01:00:00 +   0.0s] [SHELL] gamma line\n")
+    viewer = log_viewer_mod.LogViewerWidget(profile, [vport, vmerged])
+    pump(app)
+    text = viewer.pane.view.toPlainText()
+    check("뷰어가 두 파일을 병합해 보여준다", "alpha line" in text and "gamma line" in text,
+          text[:200])
+    check("뷰어는 출처 prefix 를 붙인다", "[old_mlog]" in text and "[SHELL]" in text,
+          text[:200])
+    viewer.edit.setText("beta")
+    viewer._refresh_timer.stop()
+    viewer._refresh_pane()
+    pump(app)
+    text = viewer.pane.view.toPlainText()
+    check("필터가 매치만 남긴다", "beta line" in text and "alpha line" not in text, text[:200])
+    viewer.edit.setText("")
+    viewer.source_boxes["SHELL"].setChecked(False)
+    viewer._refresh_timer.stop()
+    viewer._refresh_pane()
+    pump(app)
+    check("소스 체크박스로 파일을 뺀다",
+          "gamma line" not in viewer.pane.view.toPlainText())
+    out_path = os.path.join(tmp, "viewer_out.log")
+    from PySide6.QtWidgets import QFileDialog as _QFD
+    original_get = _QFD.getSaveFileName
+    _QFD.getSaveFileName = staticmethod(lambda *_a, **_k: (out_path, ""))
+    try:
+        viewer.save_to_file()
+    finally:
+        _QFD.getSaveFileName = original_get
+    check("뷰어 결과 저장", os.path.exists(out_path)
+          and "alpha line" in open(out_path, encoding="utf-8").read())
+    # 대용량 확인이 거부되면 파일을 추가하지 않는다
+    original_confirm = log_viewer_mod.confirm_large
+    log_viewer_mod.confirm_large = lambda _parent, _total: False
+    try:
+        before_sources = list(viewer.store.sources())
+        viewer.add_files([vport])
+    finally:
+        log_viewer_mod.confirm_large = original_confirm
+    check("대용량 확인 거부 시 추가하지 않는다",
+          list(viewer.store.sources()) == before_sources)
+    viewer.deleteLater()
+    pump(app)
 
     for mode in ("columns", "tabs", "merged", "split"):
         window._apply_layout(mode)
@@ -1230,6 +1350,7 @@ def main() -> int:
         test_review_regressions(tmp)
         test_log_features(tmp)
         test_log_dir_options(tmp)
+        test_logfile_viewer(tmp)
         test_concurrent_load(tmp)
         test_redact()
         test_filters()

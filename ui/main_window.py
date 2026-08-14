@@ -33,6 +33,7 @@ from .command_panel import CommandPanel
 from .console_pane import ConsolePane
 from .filter_view import FilterView
 from .log_start_dialog import LogStartDialog
+from .log_viewer import LogViewerDock
 from .pane_window import PaneWindow
 from .settings_dialog import SettingsDialog
 from ..core.i18n import tr
@@ -62,6 +63,7 @@ class MainWindow(QMainWindow):
         self.session = SerialHubSession(profile)
         self.profile = profile
         self.filter_views: list[FilterView] = []
+        self.viewer_docks: list[LogViewerDock] = []
         self.layout_mode = str(profile.layout.get("mode", LAYOUT_SPLIT))
         self._console_container: QWidget | None = None
         self._splitters: list[tuple[str, QSplitter]] = []
@@ -487,6 +489,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(_action(self, tr('기록 멈춤 / 재개'), self.toggle_recording_pause, "Ctrl+P"))
         self.log_menu = file_menu.addMenu(tr('로그 파일 열기'))
         self.log_menu.aboutToShow.connect(self._rebuild_log_menu)
+        file_menu.addAction(_action(self, tr('로그 파일 열기(뷰어)…'), self.open_log_viewer))
         file_menu.addAction(_action(self, tr('지금까지의 로그를 복사본으로 저장'),
                                     self.save_log_snapshot))
         file_menu.addSeparator()
@@ -1015,6 +1018,29 @@ class MainWindow(QMainWindow):
             label = f"{os.path.basename(path)}   ({size / 1024:,.0f} KB)"
             self.log_menu.addAction(_action(self.log_menu, label,
                                             lambda p=path: self._open_path(p)))
+
+    def open_log_viewer(self, paths: list[str] | None = None) -> LogViewerDock | None:
+        """과거 로그 파일을 뷰어 도크로 연다 — 메인 창에 붙이거나 떼어내 별도 창으로 쓴다.
+
+        대용량 확인은 뷰어의 add_files 가 한 번만 묻는다 (여기서 또 물으면 두 번 뜬다).
+        """
+        if paths is None:
+            paths, _ = QFileDialog.getOpenFileNames(
+                self, tr('로그 파일 선택'), self.profile.log_base_dir,
+                "Log (*.log *.txt);;All (*)")
+        if not paths:
+            return None
+        dock = LogViewerDock(self.profile, paths, self)
+        self.addDockWidget(Qt.BottomDockWidgetArea, dock)
+        dock.closed.connect(self._on_viewer_closed)
+        self.viewer_docks.append(dock)
+        diag.info("app", f"로그 뷰어 열림 files={len(paths)}")
+        self.set_status(tr('로그 뷰어 열림 — 파일 {0}개').format(len(paths)), theme.TEXT_SUB)
+        return dock
+
+    def _on_viewer_closed(self, dock) -> None:
+        if dock in self.viewer_docks:
+            self.viewer_docks.remove(dock)
 
     def _open_path(self, path: str) -> None:
         try:

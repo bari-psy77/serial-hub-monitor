@@ -197,6 +197,19 @@ EN: dict[str, str] = {
         "Recording stopped — {0} file(s) are kept",
     "기록을 시작하지 않았습니다": "Recording was not started",
     "같은 이름의 로그 파일이 있습니다": "Log files with the same name already exist",
+    "로그 뷰어": "Log viewer",
+    "로그 뷰어 — {0}": "Log viewer — {0}",
+    "로그 파일 열기(뷰어)…": "Open log files (viewer)…",
+    "로그 뷰어 열림 — 파일 {0}개": "Log viewer opened — {0} file(s)",
+    "파일 추가": "Add files",
+    "결과 저장": "Save result",
+    "로그 파일 선택": "Choose log files",
+    "읽지 못한 파일: {0}": "Files that could not be read: {0}",
+    "파일이 큽니다": "Large files",
+    "선택한 로그가 총 {0:,.0f} MB 입니다. 전부 불러오면 메모리를 많이 쓰고 시간이 "
+    "걸릴 수 있습니다. 계속할까요?":
+        "The selected logs total {0:,.0f} MB. Loading everything may use a lot of memory "
+        "and take a while. Continue?",
     "아래 파일이 이미 있습니다.\n\n{0}\n\n덮어쓰면 기존 내용이 지워집니다. "
     "이어쓰면 기존 파일 끝에 계속 기록합니다.":
         "These files already exist.\n\n{0}\n\nOverwrite erases their current contents. "
