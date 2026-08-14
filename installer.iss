@@ -8,7 +8,7 @@
 ; 막히지 않는 것이 벤치 툴에는 더 중요하다. 설치 시작 시 "모든 사용자" 를 고를 수도 있다.
 
 #define AppName "Serial Hub"
-#define AppVersion "1.3.0"
+#define AppVersion "1.4.0"
 #define AppPublisher "bari-psy77"
 #define AppExe "SerialHub.exe"
 
@@ -62,6 +62,18 @@ en.DemoIcon=Also create a demo-mode shortcut (no serial port needed)
 en.RunSelfcheck=Run installation check (recommended)
 en.LaunchApp=Launch {#AppName}
 en.KeepData=Keep your settings and profiles?%n%n[Yes] lets a future install reuse them.
+; 시작 메뉴 항목 이름 — 앱 기본 언어가 영어인데 여기가 한국어로 굳어 있었다.
+; 가이드는 **파일명이 곧 번역 키**다 (앱의 F1 도움말과 같은 규칙).
+ko.DemoName={#AppName} (데모 모드)
+ko.DemoDesktopName={#AppName} (데모)
+ko.SelfcheckName=설치 상태 점검
+ko.GuideName=사용 설명서
+ko.GuideFile=SerialHub_사용설명서.html
+en.DemoName={#AppName} (demo mode)
+en.DemoDesktopName={#AppName} (demo)
+en.SelfcheckName=Installation check
+en.GuideName=User guide
+en.GuideFile=SerialHub_UserGuide_en.html
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:DesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -77,12 +89,13 @@ Source: "README.ko.md"; DestDir: "{app}"; DestName: "README.ko.md"; Flags: ignor
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
-Name: "{group}\{#AppName} (데모 모드)"; Filename: "{app}\{#AppExe}"; Parameters: "--demo"; Tasks: demoicon
-Name: "{group}\설치 상태 점검"; Filename: "{app}\{#AppExe}"; Parameters: "--selfcheck"
-Name: "{group}\사용 설명서"; Filename: "{app}\README.md"
+Name: "{group}\{cm:DemoName}"; Filename: "{app}\{#AppExe}"; Parameters: "--demo"; Tasks: demoicon
+Name: "{group}\{cm:SelfcheckName}"; Filename: "{app}\{#AppExe}"; Parameters: "--selfcheck"
+; F1 이 여는 것과 같은 HTML 가이드로 (예전엔 원본 마크다운 README 를 가리켰다)
+Name: "{group}\{cm:GuideName}"; Filename: "{app}\_internal\docs\{cm:GuideFile}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
-Name: "{autodesktop}\{#AppName} (데모)"; Filename: "{app}\{#AppExe}"; Parameters: "--demo"; Tasks: demoicon
+Name: "{autodesktop}\{cm:DemoDesktopName}"; Filename: "{app}\{#AppExe}"; Parameters: "--demo"; Tasks: demoicon
 
 [InstallDelete]
 ; 업그레이드 설치 시 옛 버전의 _internal 을 통째로 비운다. 새 파일을 덮어쓰기만 하면

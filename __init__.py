@@ -4,4 +4,4 @@
 UI 문서 : plans/serial-monitor/20260802-serial-monitor-ui.md
 """
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"

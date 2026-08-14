@@ -1,12 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
+
+datas = [('C:\\project\\serial_hub\\docs\\SerialHub_사용설명서.html', 'docs'), ('C:\\project\\serial_hub\\docs\\SerialHub_UserGuide_en.html', 'docs')]
+binaries = []
+hiddenimports = ['serial.tools.list_ports', 'serial.tools.list_ports_windows', 'winpty', 'pyte']
+tmp_ret = collect_all('winpty')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
     ['C:\\project\\serial_hub\\launcher.py'],
     pathex=['C:\\project'],
-    binaries=[],
-    datas=[('C:\\project\\serial_hub\\docs\\SerialHub_사용설명서.html', 'docs'), ('C:\\project\\serial_hub\\docs\\SerialHub_UserGuide_en.html', 'docs')],
-    hiddenimports=['serial.tools.list_ports', 'serial.tools.list_ports_windows'],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
