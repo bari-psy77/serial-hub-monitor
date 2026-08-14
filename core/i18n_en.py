@@ -197,6 +197,10 @@ EN: dict[str, str] = {
         "Recording stopped — {0} file(s) are kept",
     "기록을 시작하지 않았습니다": "Recording was not started",
     "같은 이름의 로그 파일이 있습니다": "Log files with the same name already exist",
+    "[OK] 내장 터미널 (pywinpty + pyte)": "[OK] embedded terminal (pywinpty + pyte)",
+    "[FAIL] 내장 터미널 사용 불가 (pywinpty/pyte): {0}":
+        "[FAIL] embedded terminal unavailable (pywinpty/pyte): {0}",
+    "[FAIL] 내장 터미널 점검 실패: {0!r}": "[FAIL] embedded terminal check failed: {0!r}",
     "터미널 — PowerShell": "Terminal — PowerShell",
     "🖥 터미널": "🖥 Terminal",
     "PowerShell 터미널을 하단 도크로 엽니다": "Opens a PowerShell terminal as a bottom dock",

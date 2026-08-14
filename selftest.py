@@ -757,6 +757,21 @@ def test_terminal_pty() -> None:
           wait_until(lambda: not session2.alive, timeout=5.0))
 
 
+def test_selfcheck() -> None:
+    print("\n== --selfcheck (빌드 점검) ==")
+    from .app import selfcheck
+
+    ok, lines = selfcheck()
+    body = "\n".join(lines)
+    check("소스 실행 환경에서는 통과한다", ok, body)
+    check("pyserial 항목이 있다", "pyserial" in body, body)
+    check("PySide6 항목이 있다", "PySide6" in body, body)
+    # 내장 터미널 의존성(pywinpty/pyte)은 임포트 가드 뒤에 있어 번들에서 빠져도
+    # 화면상으론 "설치해 주세요" 안내로만 보인다 — 빌드 점검이 잡아야 한다
+    check("내장 터미널 항목이 있다 (번들 누락을 여기서 잡는다)",
+          "terminal" in body.lower() or "터미널" in body, body)
+
+
 def test_redact() -> None:
     print("\n== redact ==")
     redactor = Redactor([
@@ -1634,6 +1649,7 @@ def main() -> int:
         test_logfile_viewer(tmp)
         test_terminal_core()
         test_terminal_pty()
+        test_selfcheck()
         test_concurrent_load(tmp)
         test_redact()
         test_filters()

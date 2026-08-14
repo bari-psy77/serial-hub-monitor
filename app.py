@@ -165,6 +165,23 @@ def selfcheck() -> tuple[bool, list[str]]:
         ok = False
         lines.append(tr('[FAIL] core 동작 이상: {0!r}').format(exc))
 
+    # 내장 터미널 의존성은 임포트 가드 뒤에 있다 — 번들에서 빠져도 앱은 뜨고 터미널만
+    # "설치해 주세요" 안내로 바뀐다. 그 조용한 누락을 여기서 잡는다.
+    try:
+        from .core import terminal as terminal_mod
+        if terminal_mod.TERMINAL_AVAILABLE:
+            session = terminal_mod.TerminalSession(["cmd.exe", "/c", "echo selfcheck"],
+                                                   cols=40, rows=5)
+            session.close()
+            lines.append(tr('[OK] 내장 터미널 (pywinpty + pyte)'))
+        else:
+            ok = False
+            lines.append(tr('[FAIL] 내장 터미널 사용 불가 (pywinpty/pyte): {0}')
+                         .format(terminal_mod.TERMINAL_ERROR or "?"))
+    except Exception as exc:  # noqa: BLE001
+        ok = False
+        lines.append(tr('[FAIL] 내장 터미널 점검 실패: {0!r}').format(exc))
+
     try:
         if config_mod._writable(config_mod.PROFILE_DIR):
             lines.append(tr('[OK] 프로파일 저장 가능: {0}').format(config_mod.PROFILE_DIR))
