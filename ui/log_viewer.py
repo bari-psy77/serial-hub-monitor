@@ -194,11 +194,13 @@ class LogViewerDock(QDockWidget):
     """뷰어를 감싸는 도크 — 메인 창에 붙이거나 떼어내 독립 창으로 쓴다."""
 
     closed = Signal(object)
+    _serial = 0   # id() 는 재사용돼 이름이 겹칠 수 있다 — 단조 증가 번호를 쓴다
 
     def __init__(self, profile: Profile, paths: list[str], parent: QWidget | None = None):
         super().__init__(tr('로그 뷰어'), parent)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.setObjectName(f"logviewer_dock_{id(self):x}")
+        LogViewerDock._serial += 1
+        self.setObjectName(f"logviewer_dock_{LogViewerDock._serial}")
         self.viewer = LogViewerWidget(profile, paths, self)
         self.setWidget(self.viewer)
         names = [os.path.basename(path) for path in self.viewer.store.paths()]

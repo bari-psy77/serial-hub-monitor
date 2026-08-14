@@ -130,6 +130,34 @@ class TerminalBuffer:
             self._scroll_bottom_locked()
             self._generation += 1
 
+    def scroll_state(self) -> tuple[int, int]:
+        """(현재 위치, 최대) — 스크롤바 그리기용. 위치 == 최대면 맨 아래(최신)다."""
+        with self._lock:
+            history = self._screen.history
+            return len(history.top), len(history.top) + len(history.bottom)
+
+    def scroll_to(self, value: int) -> None:
+        """스크롤바가 준 위치로 이동 — 목표에 닿을 때까지 페이지 단위로 다가간다."""
+        with self._lock:
+            for _ in range(500):   # 히스토리 상한이 있으므로 유한 — 무한 루프 방지
+                history = self._screen.history
+                current = len(history.top)
+                if current == value:
+                    break
+                if current > value and history.top:
+                    before = len(self._screen.history.top)
+                    self._screen.prev_page()
+                    if len(self._screen.history.top) == before:
+                        break      # 더 못 올라간다
+                elif current < value and history.bottom:
+                    before = len(self._screen.history.top)
+                    self._screen.next_page()
+                    if len(self._screen.history.top) == before:
+                        break
+                else:
+                    break
+            self._generation += 1
+
     def reset(self) -> None:
         """화면·히스토리를 완전히 비운다 — 재시작한 셸이 깨끗한 화면에서 시작하게."""
         with self._lock:

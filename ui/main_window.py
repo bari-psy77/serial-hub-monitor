@@ -1042,21 +1042,48 @@ class MainWindow(QMainWindow):
         if not paths:
             return None
         dock = LogViewerDock(self.profile, paths, self)
-        self.addDockWidget(Qt.BottomDockWidgetArea, dock)
+        self._add_bottom_dock(dock)
         dock.closed.connect(self._on_viewer_closed)
         self.viewer_docks.append(dock)
         diag.info("app", f"로그 뷰어 열림 files={len(paths)}")
         self.set_status(tr('로그 뷰어 열림 — 파일 {0}개').format(len(paths)), theme.TEXT_SUB)
         return dock
 
+    def _bottom_docks(self) -> list:
+        """지금 하단에 붙어 있는(떠 있지 않은) 도크들 — 새 도크를 여기에 탭으로 묶는다."""
+        return [dock for dock in [*self.viewer_docks, *self.terminal_docks]
+                if dock.isVisible() and not dock.isFloating()]
+
+    def _add_bottom_dock(self, dock) -> None:
+        """도크는 항상 하단에 붙이고, 이미 있으면 **탭으로 묶는다**.
+
+        그냥 addDockWidget 을 반복하면 도크가 옆으로 나란히 늘어서 저마다 좁아진다
+        (실기 보고). 탭으로 묶으면 폭을 온전히 쓰고 제목 탭으로 오간다.
+        """
+        existing = self._bottom_docks()
+        self.addDockWidget(Qt.BottomDockWidgetArea, dock)
+        if existing:
+            self.tabifyDockWidget(existing[-1], dock)
+        dock.setFloating(False)   # 열 때마다 떠 있던 문제 — 항상 도킹 상태로 시작
+        dock.show()
+        dock.raise_()
+
+    def _drop_dock(self, dock) -> None:
+        """닫힌 도크를 창에서 완전히 떼어낸다 — 안 하면 빈 도크 영역이 자리를 물고 있다."""
+        try:
+            self.removeDockWidget(dock)
+        except RuntimeError:
+            pass   # 이미 파괴됨 (WA_DeleteOnClose)
+
     def _on_viewer_closed(self, dock) -> None:
         if dock in self.viewer_docks:
             self.viewer_docks.remove(dock)
+        self._drop_dock(dock)
 
     def open_terminal(self) -> TerminalDock | None:
         """내장 터미널 도크 — 메인 창에 붙이거나 떼어내 별도 창으로 쓴다."""
         dock = TerminalDock(self)
-        self.addDockWidget(Qt.BottomDockWidgetArea, dock)
+        self._add_bottom_dock(dock)
         dock.closed.connect(self._on_terminal_closed)
         self.terminal_docks.append(dock)
         if dock.pane is not None:
@@ -1071,6 +1098,7 @@ class MainWindow(QMainWindow):
     def _on_terminal_closed(self, dock) -> None:
         if dock in self.terminal_docks:
             self.terminal_docks.remove(dock)
+        self._drop_dock(dock)
 
     def open_admin_shell(self) -> None:
         """관리자(UAC 승격) PowerShell — 임베드가 불가능해 외부 창으로 띄운다."""

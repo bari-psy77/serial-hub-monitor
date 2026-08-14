@@ -10,7 +10,7 @@ from __future__ import annotations
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QKeySequence, QPainter
 from PySide6.QtWidgets import (QApplication, QDockWidget, QHBoxLayout, QLabel, QMenu,
-                               QPushButton, QVBoxLayout, QWidget)
+                               QPushButton, QScrollBar, QVBoxLayout, QWidget)
 
 from ..core import terminal as terminal_core
 from ..core.i18n import tr
@@ -59,8 +59,20 @@ def _qcolor(name, default: QColor) -> QColor:
     return color if color.isValid() else default
 
 
+class TerminalScreen(QWidget):
+    """실제 글자를 그리는 격자 — 스크롤바와 나란히 놓기 위해 TerminalPane 이 감싼다."""
+
+    def __init__(self, owner: "TerminalPane"):
+        super().__init__(owner)
+        self._owner = owner
+        self.setFocusPolicy(Qt.NoFocus)      # 키 입력은 TerminalPane 이 받는다
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt 시그니처
+        self._owner.paint_screen(self, event)
+
+
 class TerminalPane(QWidget):
-    """모노스페이스 그리드 렌더러 + 키보드/IME → pty 입력."""
+    """모노스페이스 그리드 렌더러 + 키보드/IME → pty 입력 + 세로 스크롤바."""
 
     def __init__(self, session, parent: QWidget | None = None):
         super().__init__(parent)
@@ -83,8 +95,40 @@ class TerminalPane(QWidget):
         self.customContextMenuRequested.connect(self._context_menu)
         self.setMinimumSize(240, 120)
 
+        self.screen = TerminalScreen(self)
+        self.scrollbar = QScrollBar(Qt.Vertical, self)
+        self.scrollbar.setObjectName("terminalScroll")
+        self.scrollbar.setRange(0, 0)
+        self.scrollbar.valueChanged.connect(self._on_scrollbar)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.screen, 1)
+        layout.addWidget(self.scrollbar)
+        self._syncing_scrollbar = False
+        self._sync_scrollbar()
+
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt 시그니처
         return QSize(900, 320)
+
+    # ------------------------------------------------------------------ 스크롤
+
+    def _sync_scrollbar(self) -> None:
+        """버퍼의 스크롤 위치를 스크롤바에 반영 — 되돌아오는 valueChanged 는 무시한다."""
+        value, maximum = self.session.buffer.scroll_state()
+        self._syncing_scrollbar = True
+        try:
+            self.scrollbar.setRange(0, maximum)
+            self.scrollbar.setPageStep(max(1, self.session.buffer.rows))
+            self.scrollbar.setValue(value)
+        finally:
+            self._syncing_scrollbar = False
+
+    def _on_scrollbar(self, value: int) -> None:
+        if self._syncing_scrollbar:
+            return
+        self.session.buffer.scroll_to(value)
+        self.pump()
 
     # ------------------------------------------------------------------ 갱신
 
@@ -100,11 +144,13 @@ class TerminalPane(QWidget):
             self._generation = generation
             self._was_alive = alive
             self._frame = self.session.buffer.snapshot()
-            self.update()
+            self._sync_scrollbar()
+            self.screen.update()
 
-    def paintEvent(self, _event) -> None:  # noqa: N802 - Qt 시그니처
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), _DEFAULT_BG)
+    def paint_screen(self, target: QWidget, _event) -> None:
+        """TerminalScreen 이 위임하는 실제 그리기 — 좌표계는 격자 원점(0,0)이다."""
+        painter = QPainter(target)
+        painter.fillRect(target.rect(), _DEFAULT_BG)
         painter.setFont(self._term_font)
         cell_w, cell_h = self._cell_size()
         ascent = QFontMetricsF(self._term_font).ascent()
@@ -135,7 +181,7 @@ class TerminalPane(QWidget):
                                 painter.drawText(QPointF(x + index * cell_w, baseline), ch)
                 x += width
         cursor_x, cursor_y, cursor_visible = self._frame.cursor
-        if cursor_visible and self._was_alive and self.hasFocus():
+        if cursor_visible and self._was_alive and (self.hasFocus() or self.screen.hasFocus()):
             block = QColor(_DEFAULT_FG)
             block.setAlpha(170)
             painter.fillRect(QRectF(cursor_x * cell_w, cursor_y * cell_h, cell_w, cell_h),
@@ -143,7 +189,7 @@ class TerminalPane(QWidget):
         if not self._was_alive:
             banner = tr('셸이 종료되었습니다 (코드 {0}) — [재시작] 을 눌러 주세요').format(
                 self.session.exit_status)
-            painter.fillRect(QRectF(0, 0, self.width(), cell_h + 6), QColor(0, 0, 0, 180))
+            painter.fillRect(QRectF(0, 0, target.width(), cell_h + 6), QColor(0, 0, 0, 180))
             painter.setPen(QColor("#f14c4c"))
             painter.drawText(QPointF(6, ascent + 3), banner)
         painter.end()
@@ -212,9 +258,11 @@ class TerminalPane(QWidget):
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt 시그니처
         cell_w, cell_h = self._cell_size()
-        cols = max(20, int(self.width() / cell_w))
-        rows = max(5, int(self.height() / cell_h))
+        # 스크롤바가 차지하는 폭을 빼고 격자를 잡는다 (screen 위젯 기준)
+        cols = max(20, int(self.screen.width() / cell_w))
+        rows = max(5, int(self.screen.height() / cell_h))
         self.session.resize(cols, rows)
+        self._sync_scrollbar()
         super().resizeEvent(event)
 
 
@@ -222,11 +270,13 @@ class TerminalDock(QDockWidget):
     """터미널을 감싸는 도크 — 메인 창에 붙이거나 떼어내 독립 창으로 쓴다."""
 
     closed = Signal(object)
+    _serial = 0   # id() 는 재사용돼 이름이 겹칠 수 있다 — 단조 증가 번호를 쓴다
 
     def __init__(self, parent: QWidget | None = None, session_factory=None):
         super().__init__(tr('터미널 — PowerShell'), parent)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.setObjectName(f"terminal_dock_{id(self):x}")
+        TerminalDock._serial += 1
+        self.setObjectName(f"terminal_dock_{TerminalDock._serial}")
         self.session = None
         self.pane: TerminalPane | None = None
 

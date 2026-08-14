@@ -698,6 +698,20 @@ def test_terminal_core() -> None:
     buf2.scroll_to_bottom()
     check("scroll_to_bottom 으로 즉시 최신 화면", "line8" in buf2.text(), buf2.text())
 
+    # 스크롤 위치 — 오른쪽 스크롤바가 어디쯤인지 그리는 근거
+    value, maximum = buf2.scroll_state()
+    check("맨 아래에서는 value == maximum", value == maximum and maximum > 0,
+          f"{value}/{maximum}")
+    buf2.page_up()
+    up_value, up_max = buf2.scroll_state()
+    check("스크롤백으로 올라가면 value 가 준다", up_value < value and up_max == maximum,
+          f"{up_value}/{up_max}")
+    buf2.scroll_to(maximum)
+    check("scroll_to(maximum) 은 맨 아래", buf2.scroll_state()[0] == maximum,
+          str(buf2.scroll_state()))
+    buf2.scroll_to(0)
+    check("scroll_to(0) 은 맨 위", buf2.scroll_state()[0] == 0, str(buf2.scroll_state()))
+
     # reset — 재시작한 셸이 화면 중간에 그려지던 실기 문제. 새 셸 = 깨끗한 화면.
     gen_before = buf2.generation
     buf2.reset()
@@ -1291,6 +1305,26 @@ def test_gui(tmp: str) -> None:
             _wheel(-120)
         check("휠 아래로 = 최신 방향 복귀", "scrollline29" in stub.buffer.text(),
               stub.buffer.text())
+
+        # 오른쪽 세로 스크롤바 — 위치 표시 + 드래그로 이동
+        bar = term.scrollbar
+        check("터미널에 세로 스크롤바가 있다", bar is not None and bar.isVisible())
+        check("맨 아래에서는 스크롤바가 끝에 있다", bar.value() == bar.maximum(),
+              f"{bar.value()}/{bar.maximum()}")
+        for _ in range(5):
+            _wheel(120)
+        term.pump()
+        pump(app)
+        check("휠로 올리면 스크롤바 값도 따라 준다", bar.value() < bar.maximum(),
+              f"{bar.value()}/{bar.maximum()}")
+        bar.setValue(bar.maximum())
+        pump(app)
+        check("스크롤바를 끝으로 옮기면 최신 화면으로 간다",
+              "scrollline29" in stub.buffer.text(), stub.buffer.text())
+        bar.setValue(0)
+        pump(app)
+        check("스크롤바를 맨 위로 옮기면 과거가 보인다",
+              "scrollline29" not in stub.buffer.text(), stub.buffer.text())
         term.deleteLater()
         pump(app)
 
@@ -1303,9 +1337,32 @@ def test_gui(tmp: str) -> None:
         pump(app)
         check("터미널 버튼이 도크를 연다", len(window.terminal_docks) == 1,
               str(len(window.terminal_docks)))
-        window.terminal_docks[0].close()
+        first_dock = window.terminal_docks[0]
+        check("도크는 떠 있지 않고 하단에 도킹된다",
+              not first_dock.isFloating()
+              and window.dockWidgetArea(first_dock) == Qt.BottomDockWidgetArea,
+              f"floating={first_dock.isFloating()} area={window.dockWidgetArea(first_dock)}")
+
+        # 두 번째부터는 옆으로 늘어놓지 않고 탭으로 묶는다 (실기 보고: 옆에 나란히 생김)
+        window.terminal_button.click()
+        pump(app)
+        second_dock = window.terminal_docks[1]
+        check("두 번째 도크는 첫 도크와 탭으로 묶인다",
+              second_dock in window.tabifiedDockWidgets(first_dock),
+              str(window.tabifiedDockWidgets(first_dock)))
+        check("두 번째 도크도 떠 있지 않다", not second_dock.isFloating())
+        check("도크 이름이 서로 다르다 (배치 기억이 꼬이지 않게)",
+              first_dock.objectName() != second_dock.objectName(),
+              f"{first_dock.objectName()} vs {second_dock.objectName()}")
+
+        from PySide6.QtWidgets import QDockWidget as _QDockWidget
+        for dock in list(window.terminal_docks):
+            dock.close()
         pump(app)
         check("터미널 도크 닫으면 목록에서 빠진다", not window.terminal_docks)
+        check("닫은 도크는 창에서 완전히 제거된다 (빈 영역이 남지 않게)",
+              not [d for d in window.findChildren(_QDockWidget)],
+              str([d.objectName() for d in window.findChildren(_QDockWidget)]))
 
     for mode in ("columns", "tabs", "merged", "split"):
         window._apply_layout(mode)

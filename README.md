@@ -225,9 +225,11 @@ recorded.
 
 **View → Open terminal** — a real ConPTY terminal opens as a bottom dock (colors,
 cursor movement and screen clearing all work; pywinpty + pyte). The default shell
-is PowerShell starting in your home folder. `Ctrl+V` pastes, `PageUp`/`PageDown`
-scroll history, and the right-click menu offers copy-whole-screen and restart.
-Closing the dock also ends the shell process. **Admin mode**: an elevated (UAC)
+is PowerShell starting in your home folder. The mouse wheel, the scrollbar on the
+right and `PageUp`/`PageDown` walk back through past output; typing snaps back to
+the bottom. `Ctrl+V` pastes, and the right-click menu offers copy-whole-screen and
+restart. Several terminals are tabbed together at the bottom. Closing the dock
+also ends the shell process. **Admin mode**: an elevated (UAC)
 shell cannot be embedded, so the [Admin PowerShell (external window)] button
 launches an elevated window separately. The terminal screen is never written to
 the serial log files.
