@@ -35,6 +35,8 @@ from .filter_view import FilterView
 from .log_start_dialog import LogStartDialog
 from .log_viewer import LogViewerDock
 from .pane_window import PaneWindow
+from .terminal_pane import TerminalDock
+from ..core.terminal import launch_admin_shell
 from .settings_dialog import SettingsDialog
 from ..core.i18n import tr
 
@@ -64,6 +66,7 @@ class MainWindow(QMainWindow):
         self.profile = profile
         self.filter_views: list[FilterView] = []
         self.viewer_docks: list[LogViewerDock] = []
+        self.terminal_docks: list[TerminalDock] = []
         self.layout_mode = str(profile.layout.get("mode", LAYOUT_SPLIT))
         self._console_container: QWidget | None = None
         self._splitters: list[tuple[str, QSplitter]] = []
@@ -525,6 +528,10 @@ class MainWindow(QMainWindow):
         self.ansi_action.setToolTip(tr('장치가 보낸 ANSI 색을 화면에 살립니다 (로그 파일은 항상 색 코드 '
                                        '없음)'))
         view_menu.addAction(self.ansi_action)
+        view_menu.addSeparator()
+        view_menu.addAction(_action(self, tr('터미널 열기'), self.open_terminal))
+        view_menu.addAction(_action(self, tr('관리자 PowerShell 열기 (외부 창)'),
+                                    self.open_admin_shell))
 
         self.filter_menu = bar.addMenu(tr('필터'))
         self._rebuild_filter_menu()
@@ -598,6 +605,8 @@ class MainWindow(QMainWindow):
             self.merged_pane.pump()  # 안 보일 때는 안 돌린다 — 전환 시 reload 로 채운다
         for view in list(self.filter_views):
             view.pump()
+        for dock in list(self.terminal_docks):
+            dock.pump()
 
         for role, pill in self.pills.items():
             if role not in active:
@@ -1042,6 +1051,30 @@ class MainWindow(QMainWindow):
         if dock in self.viewer_docks:
             self.viewer_docks.remove(dock)
 
+    def open_terminal(self) -> TerminalDock | None:
+        """내장 터미널 도크 — 메인 창에 붙이거나 떼어내 별도 창으로 쓴다."""
+        dock = TerminalDock(self)
+        self.addDockWidget(Qt.BottomDockWidgetArea, dock)
+        dock.closed.connect(self._on_terminal_closed)
+        self.terminal_docks.append(dock)
+        if dock.pane is not None:
+            dock.pane.setFocus()
+            self.set_status(tr('터미널 열림 — PowerShell'), theme.TEXT_SUB)
+        else:
+            self.set_status(tr('내장 터미널을 쓸 수 없습니다 — pywinpty/pyte 설치가 필요합니다'),
+                            theme.WARNING)
+        diag.info("app", f"터미널 열림 available={dock.pane is not None}")
+        return dock
+
+    def _on_terminal_closed(self, dock) -> None:
+        if dock in self.terminal_docks:
+            self.terminal_docks.remove(dock)
+
+    def open_admin_shell(self) -> None:
+        """관리자(UAC 승격) PowerShell — 임베드가 불가능해 외부 창으로 띄운다."""
+        if not launch_admin_shell():
+            self.set_status(tr('관리자 PowerShell 실행이 취소되었습니다'), theme.WARNING)
+
     def _open_path(self, path: str) -> None:
         try:
             os.startfile(path)  # noqa: S606
@@ -1206,6 +1239,9 @@ class MainWindow(QMainWindow):
         config_mod.remember_profile(self.profile.name)
         for view in list(self.filter_views):
             view.close()
+        for dock in list(self.terminal_docks):
+            if dock.session is not None:
+                dock.session.close()   # 앱이 끝나면 셸도 끝낸다 — 백그라운드 잔류 금지
         self.session.shutdown()
         super().closeEvent(event)
 

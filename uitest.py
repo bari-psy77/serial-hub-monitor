@@ -1096,6 +1096,31 @@ def main() -> int:  # noqa: PLR0915
         spin(app, 0.3)
         check("도크를 닫으면 목록에서 빠진다", dock not in window.viewer_docks)
 
+        # ------------------------------------------------- S8d 내장 터미널 (ConPTY)
+        print("\n== S8d. 내장 터미널 — ConPTY PowerShell ==")
+        from .core.terminal import TERMINAL_AVAILABLE
+        if not TERMINAL_AVAILABLE:
+            print("  [SKIP] pywinpty/pyte 미설치 — 터미널 시나리오 생략")
+        else:
+            tdock = window.open_terminal()
+            check("터미널 도크가 열린다", tdock is not None and tdock in window.terminal_docks)
+            tsession = tdock.pane.session
+            check("셸이 기동한다", wait_for(app, lambda: tsession.alive, timeout=20.0))
+            spin(app, 1.5)   # PowerShell 프롬프트가 뜰 시간
+            for ch in "echo serialhub-term-check":
+                key = ord(ch.upper()) if ch.isalnum() else _Qt.Key_Minus if ch == "-" else _Qt.Key_Space
+                send_key(app, tdock.pane, key, ch)
+            send_key(app, tdock.pane, _Qt.Key_Return, "\r")
+            check("타이핑이 셸을 왕복해 화면 버퍼에 온다",
+                  wait_for(app, lambda: "serialhub-term-check" in tsession.buffer.text(),
+                           timeout=20.0),
+                  tsession.buffer.text()[-300:])
+            tdock.close()
+            spin(app, 0.4)
+            check("터미널 도크를 닫으면 목록에서 빠진다", tdock not in window.terminal_docks)
+            check("도크를 닫으면 셸 프로세스도 끝난다",
+                  wait_for(app, lambda: not tsession.alive, timeout=8.0))
+
         # ---------------------------------------------------------- S9 종료·파일 검증
         print("\n== S9. 종료 — 로그 파일·진단 로그 ==")
         # 경로를 재구성하지 말고 store 가 실제로 쓰고 있는 경로를 쓴다

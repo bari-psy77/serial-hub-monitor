@@ -197,6 +197,23 @@ EN: dict[str, str] = {
         "Recording stopped — {0} file(s) are kept",
     "기록을 시작하지 않았습니다": "Recording was not started",
     "같은 이름의 로그 파일이 있습니다": "Log files with the same name already exist",
+    "터미널 — PowerShell": "Terminal — PowerShell",
+    "터미널 열기": "Open terminal",
+    "터미널 열림 — PowerShell": "Terminal opened — PowerShell",
+    "관리자 PowerShell (외부 창)": "Admin PowerShell (external window)",
+    "관리자 PowerShell 열기 (외부 창)": "Open admin PowerShell (external window)",
+    "관리자 PowerShell 실행이 취소되었습니다": "Launching the admin PowerShell was cancelled",
+    "UAC 승격 셸은 창 안에 넣을 수 없어 외부 창으로 띄웁니다":
+        "An elevated (UAC) shell cannot be embedded, so it opens as an external window",
+    "재시작": "Restart",
+    "화면 전체 복사": "Copy whole screen",
+    "붙여넣기": "Paste",
+    "셸이 종료되었습니다 (코드 {0}) — [재시작] 을 눌러 주세요":
+        "The shell has exited (code {0}) — press [Restart]",
+    "내장 터미널을 쓰려면 pywinpty 와 pyte 를 설치해 주세요 (pip install pywinpty pyte).":
+        "Install pywinpty and pyte to use the embedded terminal (pip install pywinpty pyte).",
+    "내장 터미널을 쓸 수 없습니다 — pywinpty/pyte 설치가 필요합니다":
+        "The embedded terminal is unavailable — pywinpty/pyte must be installed",
     "로그 뷰어": "Log viewer",
     "로그 뷰어 — {0}": "Log viewer — {0}",
     "로그 파일 열기(뷰어)…": "Open log files (viewer)…",

@@ -622,6 +622,86 @@ def test_logfile_viewer(tmp: str) -> None:
           [ln.seq for ln in store.pull(-1)] == list(range(1, 10)))
 
 
+def test_terminal_core() -> None:
+    print("\n== 터미널 버퍼 (pyte 래퍼 — 플랫폼 무관) ==")
+    from .core.terminal import TerminalBuffer
+
+    buf = TerminalBuffer(20, 5, history=100)
+    gen0 = buf.generation
+    buf.feed("plain \x1b[31mred\x1b[0m tail")
+    check("feed 로 generation 이 증가한다", buf.generation > gen0)
+    frame = buf.snapshot()
+    check("스냅샷 행 수 = rows", len(frame.rows) == 5, str(len(frame.rows)))
+    runs = frame.rows[0]
+    texts = [run.text for run in runs]
+    check("같은 속성 구간이 run 으로 합쳐진다", "".join(texts).startswith("plain red tail"),
+          str(texts))
+    red = next((run for run in runs if run.text == "red"), None)
+    check("SGR 색이 run 에 남는다", red is not None and red.fg == "red",
+          str([(run.text, run.fg) for run in runs]))
+    plain = next((run for run in runs if "plain" in run.text), None)
+    check("색 없는 구간은 기본 전경", plain is not None and plain.fg == "default", str(plain))
+
+    buf.feed("\r\n\x1b[1mbold\x1b[0m")
+    frame = buf.snapshot()
+    bold = next((run for run in frame.rows[1] if run.text == "bold"), None)
+    check("굵게 속성", bold is not None and bold.bold, str(frame.rows[1]))
+    check("커서 위치", frame.cursor == (4, 1, True), str(frame.cursor))
+
+    buf.feed("\x1b[2J\x1b[H")   # 화면 지움 + 홈
+    frame = buf.snapshot()
+    check("화면 지움이 반영된다", all(not run.text.strip() for row in frame.rows for run in row),
+          str(frame.rows[0]))
+
+    buf.resize(10, 3)
+    frame = buf.snapshot()
+    check("resize 반영", len(frame.rows) == 3 and buf.cols == 10)
+
+    # 스크롤백 — 행보다 많은 줄을 흘리면 히스토리로 밀리고 페이징으로 돌아온다
+    buf2 = TerminalBuffer(10, 3, history=100)
+    for i in range(8):
+        buf2.feed(f"line{i}\r\n")
+    check("현재 화면에는 마지막 줄들만", "line7" in buf2.text() and "line0" not in buf2.text(),
+          buf2.text())
+    buf2.page_up()   # ratio 0.5 — 한 번에 화면의 절반(2줄)씩 과거로 간다
+    check("page_up 으로 히스토리가 보인다", "line4" in buf2.text() and "line7" not in buf2.text(),
+          buf2.text())
+    buf2.page_down()
+    check("page_down 으로 현재 화면 복귀", "line7" in buf2.text(), buf2.text())
+
+
+def test_terminal_pty() -> None:
+    print("\n== 터미널 세션 (ConPTY — Windows 에서만) ==")
+    from .core import terminal as terminal_mod
+
+    if not terminal_mod.TERMINAL_AVAILABLE or sys.platform != "win32":
+        print(f"  [SKIP] pywinpty/pyte 미가용 — {terminal_mod.TERMINAL_ERROR or 'non-windows'}")
+        return
+
+    session = terminal_mod.TerminalSession(["cmd.exe"], cols=100, rows=24)
+    check("세션이 살아 있다", wait_until(lambda: session.alive, timeout=10.0))
+    session.write("echo serialhub-pty-check\r")
+    check("echo 왕복이 화면 버퍼에 도착한다",
+          wait_until(lambda: "serialhub-pty-check" in session.buffer.text(), timeout=10.0),
+          session.buffer.text()[-200:])
+    session.resize(80, 20)
+    check("resize 반영", session.buffer.cols == 80 and session.buffer.rows == 20)
+    session.write("exit\r")
+    check("종료를 감지한다", wait_until(lambda: not session.alive, timeout=10.0))
+    check("종료 코드가 남는다", wait_until(lambda: session.exit_status is not None, timeout=5.0),
+          str(session.exit_status))
+    session.close()
+    check("close 후 reader 스레드 종료",
+          session._reader is None or not session._reader.is_alive())
+
+    # close() 는 살아 있는 세션도 확실히 끝낸다 (도크 닫기 = 프로세스 종료)
+    session2 = terminal_mod.TerminalSession(["cmd.exe"], cols=80, rows=20)
+    wait_until(lambda: session2.alive, timeout=10.0)
+    session2.close()
+    check("close 가 살아 있는 프로세스를 끝낸다",
+          wait_until(lambda: not session2.alive, timeout=5.0))
+
+
 def test_redact() -> None:
     print("\n== redact ==")
     redactor = Redactor([
@@ -1083,6 +1163,66 @@ def test_gui(tmp: str) -> None:
     viewer.deleteLater()
     pump(app)
 
+    # 내장 터미널 — 스텁 세션(에코 루프백)으로 렌더·키 경로 검증 (실제 pty 불필요 = CI 안전)
+    from .core.terminal import BUFFER_AVAILABLE
+    if not BUFFER_AVAILABLE:
+        print("  [SKIP] pyte 미설치 — 터미널 GUI 검사 생략")
+    else:
+        from PySide6.QtCore import QEvent as _QEvent
+        from PySide6.QtGui import QKeyEvent as _QKeyEvent
+
+        from .core.terminal import TerminalBuffer
+        from .ui import terminal_pane as term_mod
+
+        class _EchoSession:
+            def __init__(self):
+                self.buffer = TerminalBuffer(40, 10, history=200)
+                self.written: list[str] = []
+                self.alive = True
+                self.exit_status = None
+
+            def write(self, text: str) -> None:
+                self.written.append(text)
+                self.buffer.feed(text)
+
+            def resize(self, cols: int, rows: int) -> None:
+                self.buffer.resize(cols, rows)
+
+            def close(self) -> None:
+                self.alive = False
+
+            def restart(self) -> None:
+                self.alive = True
+
+        stub = _EchoSession()
+        term = term_mod.TerminalPane(stub)
+        term.show()          # 숨긴 위젯은 resizeEvent 가 show 때까지 유예된다
+        term.resize(640, 320)
+        pump(app)
+        stub.buffer.feed("PS C:\\bench> hello-term")
+        gen_before = term._generation
+        term.pump()
+        pump(app)
+        check("pump 가 새 generation 을 반영한다", term._generation != gen_before)
+        check("화면 텍스트가 버퍼에 있다", "hello-term" in stub.buffer.text())
+
+        def _press(key, text="", mods=Qt.KeyboardModifier.NoModifier):
+            app.sendEvent(term, _QKeyEvent(_QEvent.Type.KeyPress, key, mods, text))
+
+        _press(Qt.Key_A, "a")
+        check("일반 문자가 세션으로 간다", stub.written[-1] == "a", str(stub.written[-3:]))
+        _press(Qt.Key_Return, "\r")
+        check("Enter 는 CR 로 간다", stub.written[-1] == "\r", repr(stub.written[-1]))
+        _press(Qt.Key_Up)
+        check("화살표는 VT 시퀀스로 간다", stub.written[-1] == "\x1b[A", repr(stub.written[-1]))
+        _press(Qt.Key_C, "\x03", Qt.KeyboardModifier.ControlModifier)
+        check("Ctrl+C 는 제어 바이트로 간다", stub.written[-1] == "\x03", repr(stub.written[-1]))
+        check("리사이즈가 세션 크기를 바꾼다", stub.buffer.cols > 40, str(stub.buffer.cols))
+        frame = stub.buffer.snapshot()
+        check("스냅샷 커서가 프레임에 있다", len(frame.cursor) == 3)
+        term.deleteLater()
+        pump(app)
+
     for mode in ("columns", "tabs", "merged", "split"):
         window._apply_layout(mode)
         pump(app)
@@ -1351,6 +1491,8 @@ def main() -> int:
         test_log_features(tmp)
         test_log_dir_options(tmp)
         test_logfile_viewer(tmp)
+        test_terminal_core()
+        test_terminal_pty()
         test_concurrent_load(tmp)
         test_redact()
         test_filters()
