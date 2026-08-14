@@ -657,6 +657,23 @@ def test_terminal_core() -> None:
     frame = buf.snapshot()
     check("resize 반영", len(frame.rows) == 3 and buf.cols == 10)
 
+    # 전각(한글) — pyte 는 뒤 칸에 data='' 연속 셀을 둔다. 이를 공백으로 바꾸면
+    # 화면에서 글자마다 틈이 생긴다 (실기 보고: "용 어 가  cmdlet…")
+    wide = TerminalBuffer(20, 3)
+    wide.feed("가나 ab다")
+    row = wide.snapshot().rows[0]
+    joined = "".join(run.text for run in row)
+    check("전각 연속 셀이 가짜 공백이 되지 않는다",
+          joined.startswith("가나 ab다"), repr(joined))
+    check("run 의 cells 합 = 화면 폭 (칸 단위 위치 계산)",
+          sum(run.cells for run in row) == 20,
+          str([(run.text, run.cells) for run in row]))
+    check("전각 문자 run 은 2칸을 차지한다",
+          row[0].text == "가" and row[0].cells == 2, str(row[0]))
+    narrow = next((run for run in row if "ab" in run.text), None)
+    check("반각 run 의 cells = 글자 수",
+          narrow is not None and narrow.cells == len(narrow.text), str(narrow))
+
     # 스크롤백 — 행보다 많은 줄을 흘리면 히스토리로 밀리고 페이징으로 돌아온다
     buf2 = TerminalBuffer(10, 3, history=100)
     for i in range(8):

@@ -43,13 +43,18 @@ DEFAULT_ROWS = 30
 
 @dataclass(frozen=True, slots=True)
 class Run:
-    """같은 표시 속성이 이어지는 구간 — 문자 단위로 그리면 화면당 수천 번 칠하게 된다."""
+    """같은 표시 속성이 이어지는 구간 — 문자 단위로 그리면 화면당 수천 번 칠하게 된다.
+
+    cells = 이 run 이 차지하는 터미널 칸 수. 전각(한글 등) 문자는 글자 1개가 2칸이라
+    len(text) 로 위치를 재면 화면이 어긋난다 — 렌더러는 반드시 cells 로 전진한다.
+    """
 
     text: str
     fg: str = "default"
     bg: str = "default"
     bold: bool = False
     reverse: bool = False
+    cells: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,18 +127,37 @@ class TerminalBuffer:
                 line = buffer[y]
                 runs: list[Run] = []
                 run_chars: list[str] = []
+                run_cells = 0
                 attrs = None
-                for x in range(self.cols):
+                x = 0
+                while x < self.cols:
                     ch = line[x]
+                    if ch.data == "":
+                        # 전각 문자의 연속 셀 (pyte 가 data='' 로 표시) — 앞 글자가
+                        # 이미 2칸을 차지했다. 공백으로 바꾸면 글자 사이가 벌어진다.
+                        x += 1
+                        continue
                     cell_attrs = (ch.fg, ch.bg, bool(ch.bold), bool(ch.reverse))
+                    if x + 1 < self.cols and line[x + 1].data == "":
+                        # 전각은 독립 run — 렌더러가 2칸 자리에 glyph 하나를 그린다
+                        if run_chars:
+                            runs.append(Run("".join(run_chars), *attrs, cells=run_cells))
+                            run_chars, run_cells = [], 0
+                        runs.append(Run(ch.data, *cell_attrs, cells=2))
+                        attrs = None
+                        x += 2
+                        continue
                     if attrs is None:
                         attrs = cell_attrs
                     if cell_attrs != attrs:
-                        runs.append(Run("".join(run_chars), *attrs))
-                        run_chars, attrs = [], cell_attrs
+                        runs.append(Run("".join(run_chars), *attrs, cells=run_cells))
+                        run_chars, run_cells = [], 0
+                        attrs = cell_attrs
                     run_chars.append(ch.data or " ")
-                if attrs is not None:
-                    runs.append(Run("".join(run_chars), *attrs))
+                    run_cells += 1
+                    x += 1
+                if run_chars:
+                    runs.append(Run("".join(run_chars), *attrs, cells=run_cells))
                 rows.append(runs)
             cursor = (self._screen.cursor.x, self._screen.cursor.y,
                       not self._screen.cursor.hidden)

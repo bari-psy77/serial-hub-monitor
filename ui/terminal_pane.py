@@ -8,7 +8,7 @@ generation 이 바뀐 경우에만 스냅샷을 떠서 다시 그린다. 자체 
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import (QColor, QFontDatabase, QFontMetricsF, QKeySequence, QPainter)
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QKeySequence, QPainter
 from PySide6.QtWidgets import (QApplication, QDockWidget, QHBoxLayout, QLabel, QMenu,
                                QPushButton, QVBoxLayout, QWidget)
 
@@ -68,9 +68,15 @@ class TerminalPane(QWidget):
         self._generation = -1
         self._frame = session.buffer.snapshot()
         self._was_alive = True
-        font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
-        font.setPointSize(10)
-        self.setFont(font)
+        # ★위젯 폰트(self.font())를 쓰면 안 된다 — 테마 QSS(font-family: UI_FONT)가
+        #   polish 때 프로포셔널 폰트로 덮어써 격자 계산이 전부 어긋난다 (실기 확인).
+        #   터미널 폰트는 멤버로 고정하고 메트릭·페인트에 직접 쓴다.
+        self._term_font = QFont()
+        self._term_font.setFamilies(["Cascadia Mono", "Consolas", "D2Coding"])
+        self._term_font.setStyleHint(QFont.Monospace)
+        self._term_font.setPointSize(10)
+        self._bold_font = QFont(self._term_font)
+        self._bold_font.setBold(True)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAttribute(Qt.WA_InputMethodEnabled, True)   # 한글 IME 입력
         self.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -83,7 +89,7 @@ class TerminalPane(QWidget):
     # ------------------------------------------------------------------ 갱신
 
     def _cell_size(self) -> tuple[float, float]:
-        metrics = QFontMetricsF(self.font())
+        metrics = QFontMetricsF(self._term_font)
         return metrics.horizontalAdvance("M"), metrics.height()
 
     def pump(self) -> None:
@@ -99,15 +105,15 @@ class TerminalPane(QWidget):
     def paintEvent(self, _event) -> None:  # noqa: N802 - Qt 시그니처
         painter = QPainter(self)
         painter.fillRect(self.rect(), _DEFAULT_BG)
-        painter.setFont(self.font())
+        painter.setFont(self._term_font)
         cell_w, cell_h = self._cell_size()
-        ascent = QFontMetricsF(self.font()).ascent()
-        bold_font = self.font()
-        bold_font.setBold(True)
+        ascent = QFontMetricsF(self._term_font).ascent()
+        bold_font = self._bold_font
         for y, runs in enumerate(self._frame.rows):
             x = 0.0
             for run in runs:
-                width = cell_w * len(run.text)
+                # ★len(text) 가 아니라 cells 로 전진한다 — 전각(한글)은 글자 1개 = 2칸
+                width = cell_w * run.cells
                 fg = _qcolor(run.fg, _DEFAULT_FG)
                 bg = _qcolor(run.bg, _DEFAULT_BG)
                 if run.reverse:
@@ -115,9 +121,18 @@ class TerminalPane(QWidget):
                 if bg != _DEFAULT_BG:
                     painter.fillRect(QRectF(x, y * cell_h, width, cell_h), bg)
                 if run.text.strip():
-                    painter.setFont(bold_font if run.bold else self.font())
+                    painter.setFont(bold_font if run.bold else self._term_font)
                     painter.setPen(fg)
-                    painter.drawText(QPointF(x, y * cell_h + ascent), run.text)
+                    # ★글자를 격자 칸 위치에 하나씩 놓는다. 문자열째로 그리면 폰트의
+                    #   실제 advance 와 cell_w 의 오차가 누적돼 run 경계(색 바뀌는
+                    #   지점)마다 틈이 생긴다 (실기 스크린샷으로 확인).
+                    baseline = y * cell_h + ascent
+                    if run.cells == 2 and len(run.text) == 1:
+                        painter.drawText(QPointF(x, baseline), run.text)   # 전각 1글자
+                    else:
+                        for index, ch in enumerate(run.text):
+                            if ch != " ":
+                                painter.drawText(QPointF(x + index * cell_w, baseline), ch)
                 x += width
         cursor_x, cursor_y, cursor_visible = self._frame.cursor
         if cursor_visible and self._was_alive and self.hasFocus():
