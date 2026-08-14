@@ -198,6 +198,8 @@ EN: dict[str, str] = {
     "기록을 시작하지 않았습니다": "Recording was not started",
     "같은 이름의 로그 파일이 있습니다": "Log files with the same name already exist",
     "터미널 — PowerShell": "Terminal — PowerShell",
+    "🖥 터미널": "🖥 Terminal",
+    "PowerShell 터미널을 하단 도크로 엽니다": "Opens a PowerShell terminal as a bottom dock",
     "터미널 열기": "Open terminal",
     "터미널 열림 — PowerShell": "Terminal opened — PowerShell",
     "관리자 PowerShell (외부 창)": "Admin PowerShell (external window)",

@@ -74,7 +74,8 @@ class TerminalBuffer:
         self.cols = cols
         self.rows = rows
         self._lock = threading.Lock()
-        self._screen = pyte.HistoryScreen(cols, rows, history=history)
+        # ratio=0.1 → 한 페이지 = 화면의 1/10 (30행이면 3줄) — 휠 한 칸 단위에 맞춘다
+        self._screen = pyte.HistoryScreen(cols, rows, history=history, ratio=0.1)
         self._stream = pyte.Stream(self._screen)
         self._generation = 0
 
@@ -83,10 +84,19 @@ class TerminalBuffer:
         with self._lock:
             return self._generation
 
+    def _scroll_bottom_locked(self) -> None:
+        history = self._screen.history
+        while history.position < history.size and history.bottom:
+            self._screen.next_page()
+            history = self._screen.history
+
     def feed(self, data: str) -> None:
         if not data:
             return
         with self._lock:
+            # pyte 의 페이징은 buffer 자체를 돌려놓는다 — 스크롤백 상태로 feed 하면
+            # 과거 화면 위에 출력이 섞인다. 새 출력이 오면 먼저 최신으로 복귀한다.
+            self._scroll_bottom_locked()
             self._stream.feed(data)
             self._generation += 1
 
@@ -112,6 +122,22 @@ class TerminalBuffer:
     def page_down(self) -> None:
         with self._lock:
             self._screen.next_page()
+            self._generation += 1
+
+    def scroll_to_bottom(self) -> None:
+        """스크롤백을 접고 최신 화면으로 — 타이핑·재시작 등 상호작용 직전에 부른다."""
+        with self._lock:
+            self._scroll_bottom_locked()
+            self._generation += 1
+
+    def reset(self) -> None:
+        """화면·히스토리를 완전히 비운다 — 재시작한 셸이 깨끗한 화면에서 시작하게."""
+        with self._lock:
+            self._screen.reset()
+            self._screen.history.top.clear()
+            self._screen.history.bottom.clear()
+            self._screen.history = self._screen.history._replace(
+                position=self._screen.history.size)
             self._generation += 1
 
     def text(self) -> str:
@@ -249,9 +275,13 @@ class TerminalSession:
         self._waiter = None
 
     def restart(self) -> None:
-        """같은 셸·같은 폴더로 새 프로세스 — 화면은 이어서 쓴다 (실제 터미널의 재시작처럼)."""
+        """같은 셸·같은 폴더로 새 프로세스 — 화면은 비우고 맨 위부터 다시 시작한다.
+
+        이어 그리면 새 ConPTY 의 좌표와 옛 화면이 어긋나 프롬프트가 화면 한가운데에
+        찍힌다 (실기 확인). 실제 터미널 재시작처럼 깨끗한 화면이 맞다.
+        """
         self.close()
-        self.buffer.feed("\r\n")
+        self.buffer.reset()
         self._start()
 
     # ------------------------------------------------------------------ 입출력

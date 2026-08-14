@@ -258,6 +258,8 @@ class MainWindow(QMainWindow):
             lambda: self.open_settings(SettingsDialog.PAGE_PROFILE))
         row.addSpacing(10)
         add(tr('🔎 필터드뷰'), tr('매치 라인만 보는 창 (Ctrl+K)'), lambda: self.open_filter_view(None))
+        self.terminal_button = add(tr('🖥 터미널'), tr('PowerShell 터미널을 하단 도크로 엽니다'),
+                                   self.open_terminal)
         row.addStretch(1)
         add(tr('❓ 도움말'), tr('사용 설명서 열기 (F1)'), self.open_help)
         return bar

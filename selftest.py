@@ -680,11 +680,35 @@ def test_terminal_core() -> None:
         buf2.feed(f"line{i}\r\n")
     check("현재 화면에는 마지막 줄들만", "line7" in buf2.text() and "line0" not in buf2.text(),
           buf2.text())
-    buf2.page_up()   # ratio 0.5 — 한 번에 화면의 절반(2줄)씩 과거로 간다
+    for _ in range(3):
+        buf2.page_up()   # ratio 0.1 — 3행 화면이면 한 번에 1줄 (휠 한 칸 단위)
     check("page_up 으로 히스토리가 보인다", "line4" in buf2.text() and "line7" not in buf2.text(),
           buf2.text())
-    buf2.page_down()
+    for _ in range(3):
+        buf2.page_down()
     check("page_down 으로 현재 화면 복귀", "line7" in buf2.text(), buf2.text())
+
+    # 스크롤백 중 새 출력 — pyte 는 페이징이 buffer 자체를 돌려놓기 때문에, 그대로
+    # feed 하면 과거 화면 위에 출력이 섞인다. feed 가 먼저 최신으로 복귀해야 한다.
+    buf2.page_up()
+    buf2.feed("line8\r\n")
+    check("스크롤백 중 출력이 오면 최신 화면으로 복귀해 이어 쓴다",
+          "line8" in buf2.text(), buf2.text())
+    buf2.page_up()
+    buf2.scroll_to_bottom()
+    check("scroll_to_bottom 으로 즉시 최신 화면", "line8" in buf2.text(), buf2.text())
+
+    # reset — 재시작한 셸이 화면 중간에 그려지던 실기 문제. 새 셸 = 깨끗한 화면.
+    gen_before = buf2.generation
+    buf2.reset()
+    check("reset 후 화면이 비고 generation 이 오른다",
+          buf2.text().strip() == "" and buf2.generation > gen_before, repr(buf2.text()))
+    buf2.feed("fresh\r\n")
+    check("reset 후 출력은 맨 윗줄부터", buf2.text().splitlines()[0].strip() == "fresh",
+          repr(buf2.text()))
+    buf2.page_up()
+    check("reset 은 히스토리도 비운다 (과거 line 이 안 나온다)",
+          "line" not in buf2.text(), buf2.text())
 
 
 def test_terminal_pty() -> None:
@@ -1237,8 +1261,51 @@ def test_gui(tmp: str) -> None:
         check("리사이즈가 세션 크기를 바꾼다", stub.buffer.cols > 40, str(stub.buffer.cols))
         frame = stub.buffer.snapshot()
         check("스냅샷 커서가 프레임에 있다", len(frame.cursor) == 3)
+
+        # 휠 스크롤 — 위로 굴리면 스크롤백, 타이핑(에코 유입)하면 최신으로 복귀
+        from PySide6.QtCore import QPoint, QPointF as _QPointF
+        from PySide6.QtGui import QWheelEvent as _QWheelEvent
+
+        stub.buffer.resize(40, 5)
+        for i in range(30):
+            stub.buffer.feed(f"scrollline{i}\r\n")
+        term.pump()
+        pump(app)
+
+        def _wheel(delta_y: int) -> None:
+            app.sendEvent(term, _QWheelEvent(
+                _QPointF(10, 10), _QPointF(10, 10), QPoint(0, 0), QPoint(0, delta_y),
+                Qt.NoButton, Qt.KeyboardModifier.NoModifier,
+                Qt.ScrollPhase.NoScrollPhase, False))
+
+        for _ in range(6):
+            _wheel(120)
+        check("휠 위로 = 스크롤백 (최신 줄이 화면에서 사라진다)",
+              "scrollline29" not in stub.buffer.text(), stub.buffer.text())
+        _press(Qt.Key_A, "a")
+        check("타이핑하면 최신 화면으로 복귀한다",
+              "scrollline29" in stub.buffer.text(), stub.buffer.text())
+        for _ in range(4):
+            _wheel(120)
+        for _ in range(8):
+            _wheel(-120)
+        check("휠 아래로 = 최신 방향 복귀", "scrollline29" in stub.buffer.text(),
+              stub.buffer.text())
         term.deleteLater()
         pump(app)
+
+        # 액션 바 터미널 버튼 — 메뉴를 뒤지지 않고 바로 연다 (아이콘은 언어 무관)
+        check("액션 바에 터미널 버튼이 있다",
+              hasattr(window, "terminal_button")
+              and window.terminal_button.text().startswith("🖥"),
+              getattr(getattr(window, "terminal_button", None), "text", lambda: "없음")())
+        window.terminal_button.click()
+        pump(app)
+        check("터미널 버튼이 도크를 연다", len(window.terminal_docks) == 1,
+              str(len(window.terminal_docks)))
+        window.terminal_docks[0].close()
+        pump(app)
+        check("터미널 도크 닫으면 목록에서 빠진다", not window.terminal_docks)
 
     for mode in ("columns", "tabs", "merged", "split"):
         window._apply_layout(mode)

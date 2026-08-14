@@ -1115,6 +1115,23 @@ def main() -> int:  # noqa: PLR0915
                   wait_for(app, lambda: "serialhub-term-check" in tsession.buffer.text(),
                            timeout=20.0),
                   tsession.buffer.text()[-300:])
+
+            # 재시작 — 새 셸은 깨끗한 화면 맨 위에서 시작해야 한다 (실기 보고:
+            # 이전 화면 한가운데에 새 프롬프트가 그려졌다)
+            tdock.restart_button.click()
+            check("재시작하면 이전 화면이 지워진다",
+                  wait_for(app, lambda: "serialhub-term-check" not in tsession.buffer.text(),
+                           timeout=10.0),
+                  tsession.buffer.text()[-200:])
+
+            def _first_line() -> str:
+                lines = [ln for ln in tsession.buffer.text().splitlines()]
+                return lines[0].strip() if lines else ""
+
+            check("재시작한 셸 출력이 맨 윗줄부터 나온다",
+                  wait_for(app, lambda: _first_line().startswith(("Windows PowerShell", "PS ")),
+                           timeout=25.0),
+                  repr(tsession.buffer.text()[:120]))
             tdock.close()
             spin(app, 0.4)
             check("터미널 도크를 닫으면 목록에서 빠진다", tdock not in window.terminal_docks)

@@ -157,21 +157,38 @@ class TerminalPane(QWidget):
             event.accept()
             return
         if event.key() == Qt.Key_PageUp:
-            self.session.buffer.page_up()
+            for _ in range(5):        # 페이지 = 휠 5칸 분량 (약 반 화면)
+                self.session.buffer.page_up()
             self.pump()
             event.accept()
             return
         if event.key() == Qt.Key_PageDown:
-            self.session.buffer.page_down()
+            for _ in range(5):
+                self.session.buffer.page_down()
             self.pump()
             event.accept()
             return
         data = encode_key(event)
         if data:
+            # 타이핑하면 스크롤백을 접는다 — 실제 터미널과 같은 동작
+            self.session.buffer.scroll_to_bottom()
             self.session.write(data)
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def wheelEvent(self, event) -> None:  # noqa: N802 - Qt 시그니처
+        delta = event.angleDelta().y()
+        if delta == 0:
+            super().wheelEvent(event)
+            return
+        for _ in range(max(1, abs(delta) // 120)):
+            if delta > 0:
+                self.session.buffer.page_up()
+            else:
+                self.session.buffer.page_down()
+        self.pump()
+        event.accept()
 
     def inputMethodEvent(self, event) -> None:  # noqa: N802 - 한글 IME 확정 문자열 전송
         commit = event.commitString()
