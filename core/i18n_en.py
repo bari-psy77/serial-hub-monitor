@@ -198,6 +198,8 @@ EN: dict[str, str] = {
     "기록을 시작하지 않았습니다": "Recording was not started",
     "같은 이름의 로그 파일이 있습니다": "Log files with the same name already exist",
     "[OK] 내장 터미널 (pywinpty + pyte)": "[OK] embedded terminal (pywinpty + pyte)",
+    "[--] 내장 터미널: Windows 전용 — 이 플랫폼에서는 확인하지 않습니다":
+        "[--] embedded terminal: Windows only — not checked on this platform",
     "[FAIL] 내장 터미널 사용 불가 (pywinpty/pyte): {0}":
         "[FAIL] embedded terminal unavailable (pywinpty/pyte): {0}",
     "[FAIL] 내장 터미널 점검 실패: {0!r}": "[FAIL] embedded terminal check failed: {0!r}",

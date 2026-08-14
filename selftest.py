@@ -624,7 +624,11 @@ def test_logfile_viewer(tmp: str) -> None:
 
 def test_terminal_core() -> None:
     print("\n== 터미널 버퍼 (pyte 래퍼 — 플랫폼 무관) ==")
-    from .core.terminal import TerminalBuffer
+    from .core.terminal import BUFFER_AVAILABLE, TERMINAL_ERROR, TerminalBuffer
+
+    if not BUFFER_AVAILABLE:
+        print(f"  [SKIP] pyte 미설치 — {TERMINAL_ERROR}")
+        return
 
     buf = TerminalBuffer(20, 5, history=100)
     gen0 = buf.generation
@@ -759,7 +763,7 @@ def test_terminal_pty() -> None:
 
 def test_selfcheck() -> None:
     print("\n== --selfcheck (빌드 점검) ==")
-    from .app import selfcheck
+    from .app import selfcheck, terminal_status
 
     ok, lines = selfcheck()
     body = "\n".join(lines)
@@ -770,6 +774,17 @@ def test_selfcheck() -> None:
     # 화면상으론 "설치해 주세요" 안내로만 보인다 — 빌드 점검이 잡아야 한다
     check("내장 터미널 항목이 있다 (번들 누락을 여기서 잡는다)",
           "terminal" in body.lower() or "터미널" in body, body)
+
+    # ★Windows 전용 기능이라 리눅스 CI 에서는 '없음' 이 정상이다 — 그걸로 빌드를
+    #   실패시키면 CI 가 늘 빨갛다 (실제로 이 검사를 넣고 한 번 깨뜨렸다)
+    ok_win, line_win = terminal_status("win32", available=True, error="")
+    check("Windows + 가용 = 통과", ok_win and "OK" in line_win, line_win)
+    ok_missing, line_missing = terminal_status("win32", available=False, error="no module")
+    check("Windows 에서 빠져 있으면 실패로 잡는다",
+          not ok_missing and "FAIL" in line_missing, line_missing)
+    ok_linux, line_linux = terminal_status("linux", available=False, error="no module")
+    check("다른 플랫폼에서는 실패시키지 않는다 (CI)", ok_linux, line_linux)
+    check("다른 플랫폼에서는 확인하지 않았다고 알린다", "FAIL" not in line_linux, line_linux)
 
 
 def test_redact() -> None:

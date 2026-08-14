@@ -119,6 +119,20 @@ def emit(lines: list[str], filename: str) -> str:
     return path
 
 
+def terminal_status(platform: str, available: bool, error: str) -> tuple[bool, str]:
+    """내장 터미널 점검 결과 — (통과 여부, 한 줄).
+
+    ★내장 터미널은 pywinpty(ConPTY) 기반이라 **Windows 전용**이다. 리눅스 CI 에서
+    '없음' 을 실패로 세면 빌드가 늘 빨갛다 — 그 플랫폼에서는 확인하지 않았다고만 적는다.
+    Windows 에서 빠져 있는 것은 진짜 번들 누락이므로 실패로 잡는다.
+    """
+    if platform != "win32":
+        return True, tr('[--] 내장 터미널: Windows 전용 — 이 플랫폼에서는 확인하지 않습니다')
+    if available:
+        return True, tr('[OK] 내장 터미널 (pywinpty + pyte)')
+    return False, tr('[FAIL] 내장 터미널 사용 불가 (pywinpty/pyte): {0}').format(error or "?")
+
+
 def selfcheck() -> tuple[bool, list[str]]:
     """빌드된 exe 가 진짜 쓸 수 있는 상태인지 확인한다.
 
@@ -169,15 +183,15 @@ def selfcheck() -> tuple[bool, list[str]]:
     # "설치해 주세요" 안내로 바뀐다. 그 조용한 누락을 여기서 잡는다.
     try:
         from .core import terminal as terminal_mod
-        if terminal_mod.TERMINAL_AVAILABLE:
+        term_ok, term_line = terminal_status(sys.platform, terminal_mod.TERMINAL_AVAILABLE,
+                                             terminal_mod.TERMINAL_ERROR)
+        if term_ok and terminal_mod.TERMINAL_AVAILABLE:
+            # 실제로 ConPTY 프로세스를 띄워 본다 — 임포트만으로는 네이티브 로딩 실패를 놓친다
             session = terminal_mod.TerminalSession(["cmd.exe", "/c", "echo selfcheck"],
                                                    cols=40, rows=5)
             session.close()
-            lines.append(tr('[OK] 내장 터미널 (pywinpty + pyte)'))
-        else:
-            ok = False
-            lines.append(tr('[FAIL] 내장 터미널 사용 불가 (pywinpty/pyte): {0}')
-                         .format(terminal_mod.TERMINAL_ERROR or "?"))
+        ok = ok and term_ok
+        lines.append(term_line)
     except Exception as exc:  # noqa: BLE001
         ok = False
         lines.append(tr('[FAIL] 내장 터미널 점검 실패: {0!r}').format(exc))
