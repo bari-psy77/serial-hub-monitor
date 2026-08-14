@@ -1050,9 +1050,14 @@ class MainWindow(QMainWindow):
         return dock
 
     def _bottom_docks(self) -> list:
-        """지금 하단에 붙어 있는(떠 있지 않은) 도크들 — 새 도크를 여기에 탭으로 묶는다."""
+        """지금 하단에 붙어 있는(떠 있지 않은) 도크들 — 새 도크를 여기에 탭으로 묶는다.
+
+        ★isVisible() 로 세면 안 된다 — 창이 최소화됐거나 아직 표시되기 전이면 전부
+        안 보이는 것으로 나와 탭 묶기가 조용히 빠진다. 목록은 닫을 때 비우므로
+        여기 있는 도크는 살아 있는 도크다.
+        """
         return [dock for dock in [*self.viewer_docks, *self.terminal_docks]
-                if dock.isVisible() and not dock.isFloating()]
+                if not dock.isFloating()]
 
     def _add_bottom_dock(self, dock) -> None:
         """도크는 항상 하단에 붙이고, 이미 있으면 **탭으로 묶는다**.

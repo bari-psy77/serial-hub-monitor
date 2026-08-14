@@ -1389,6 +1389,20 @@ def test_gui(tmp: str) -> None:
         for dock in list(window.terminal_docks):
             dock.close()
         pump(app)
+
+        # 창이 최소화됐거나 아직 안 보이는 상태여도 탭 묶기는 같아야 한다
+        # (isVisible 로 기존 도크를 세면 이 경우 조용히 옆으로 붙는다)
+        window.hide()
+        pump(app)
+        hidden_first = window.open_terminal()
+        hidden_second = window.open_terminal()
+        pump(app)
+        check("창이 안 보이는 상태에서도 두 번째 도크가 탭으로 묶인다",
+              hidden_second in window.tabifiedDockWidgets(hidden_first),
+              str(window.tabifiedDockWidgets(hidden_first)))
+        for dock in list(window.terminal_docks):
+            dock.close()
+        pump(app)
         check("터미널 도크 닫으면 목록에서 빠진다", not window.terminal_docks)
         check("닫은 도크는 창에서 완전히 제거된다 (빈 영역이 남지 않게)",
               not [d for d in window.findChildren(_QDockWidget)],
