@@ -48,6 +48,7 @@ class SerialHubSession:
         names = {entry.role: entry.log_name for entry in self.profile.ports if entry.log_name}
         names[MERGED_KEY] = self.profile.merged_log_name
         self.store.set_file_naming(names, self.profile.log_include_session)
+        self.store.set_use_date_folder(self.profile.log_use_date_folder)
 
     def retarget_logs(self) -> tuple[str, str]:
         """기록 중 로그 폴더·파일명·접두어가 바뀌면 지금부터 새 파일에 쓴다.
@@ -68,11 +69,17 @@ class SerialHubSession:
         new_dir = self.store.relocate(self.profile.log_base_dir, name)
         return old_dir, new_dir
 
-    def start_recording(self, session_name: str | None = None) -> str:
+    def plan_recording(self, session_name: str) -> dict[str, str]:
+        """이 이름으로 기록을 시작하면 만들어질 파일 경로 — 시작 전 존재 검사(덮어쓰기 확인)용."""
+        self.apply_log_naming()
+        return self.store.plan_paths(self.profile.log_base_dir, session_name,
+                                     self.profile.active_roles())
+
+    def start_recording(self, session_name: str | None = None, overwrite: bool = False) -> str:
         self.session_name = session_name or self.new_session_name()
         self.apply_log_naming()
         self.store.start_session(self.profile.log_base_dir, self.session_name,
-                                 self.profile.active_roles())
+                                 self.profile.active_roles(), overwrite=overwrite)
         return self.session_name
 
     def stop_recording(self) -> None:

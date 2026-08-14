@@ -116,6 +116,7 @@ class Profile:
     log_base_dir: str = field(default_factory=lambda: default_log_base())
     session_prefix: str = "serialhub"
     log_include_session: bool = True   # 파일명에 `<접두어>_HHMMSS_` 를 붙일지
+    log_use_date_folder: bool = False  # 켜면 base 아래 MMDD 하위 폴더에 저장 (기본은 base 에 바로)
     merged_log_name: str = "all"       # 병합 파일 이름 조각
     max_log_mb: int = 200              # 병합 파일 크기 상한 (0 = 안 나눔)
     search_history: dict[str, list[str]] = field(default_factory=dict)
@@ -192,6 +193,7 @@ class Profile:
             "log_base_dir": self.log_base_dir,
             "session_prefix": self.session_prefix,
             "log_include_session": self.log_include_session,
+            "log_use_date_folder": self.log_use_date_folder,
             "merged_log_name": self.merged_log_name,
             "max_log_mb": self.max_log_mb,
             "search_history": {k: list(v)[-30:] for k, v in self.search_history.items()},
@@ -225,6 +227,7 @@ class Profile:
         profile.log_base_dir = str(data.get("log_base_dir") or default_log_base())
         profile.session_prefix = str(data.get("session_prefix", "serialhub"))
         profile.log_include_session = bool(data.get("log_include_session", True))
+        profile.log_use_date_folder = bool(data.get("log_use_date_folder", False))
         profile.merged_log_name = str(data.get("merged_log_name", "all")) or "all"
         profile.max_log_mb = max(0, min(4096, int(data.get("max_log_mb", 200))))
         history = data.get("search_history")

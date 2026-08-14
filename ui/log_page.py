@@ -35,7 +35,9 @@ class LogPage(QWidget):
         row.addWidget(self.dir_edit, 1)
         row.addWidget(self.browse_button)
         form.addRow(tr('로그 폴더'), row)
-        self.dir_hint = QLabel(tr('이 아래에 날짜별(MMDD) 폴더가 자동으로 생깁니다'))
+        self.date_folder_box = QCheckBox(tr('날짜별(MMDD) 하위 폴더에 저장'))
+        form.addRow("", self.date_folder_box)
+        self.dir_hint = QLabel("")
         self.dir_hint.setObjectName("hint")
         form.addRow("", self.dir_hint)
         location.add_layout(form)
@@ -88,6 +90,7 @@ class LogPage(QWidget):
         for widget in (self.prefix_edit, self.merged_edit, *self.port_edits.values()):
             widget.textChanged.connect(self._update_preview)
         self.include_box.toggled.connect(self._update_preview)
+        self.date_folder_box.toggled.connect(self._update_dir_hint)
 
         self.revert()
 
@@ -97,6 +100,8 @@ class LogPage(QWidget):
         """프로파일 값을 위젯으로 (창을 열 때 / 취소할 때)."""
         self.refresh_ports()
         self.dir_edit.setText(self.profile.log_base_dir)
+        self.date_folder_box.setChecked(self.profile.log_use_date_folder)
+        self._update_dir_hint()
         self.prefix_edit.setText(self.profile.session_prefix)
         self.include_box.setChecked(self.profile.log_include_session)
         self.merged_edit.setText(self.profile.merged_log_name)
@@ -130,6 +135,9 @@ class LogPage(QWidget):
         if self.include_box.isChecked() != self.profile.log_include_session:
             self.profile.log_include_session = self.include_box.isChecked()
             changed = True
+        if self.date_folder_box.isChecked() != self.profile.log_use_date_folder:
+            self.profile.log_use_date_folder = self.date_folder_box.isChecked()
+            changed = True
         merged = self.merged_edit.text().strip() or "all"
         if merged != self.profile.merged_log_name:
             self.profile.merged_log_name = merged
@@ -150,6 +158,12 @@ class LogPage(QWidget):
         path = QFileDialog.getExistingDirectory(self, tr('로그 폴더 선택'), self.dir_edit.text())
         if path:
             self.dir_edit.setText(os.path.normpath(path))
+
+    def _update_dir_hint(self, *_args) -> None:
+        if self.date_folder_box.isChecked():
+            self.dir_hint.setText(tr('이 아래에 날짜별(MMDD) 폴더가 자동으로 생깁니다'))
+        else:
+            self.dir_hint.setText(tr('날짜 하위 폴더 없이 이 폴더에 바로 저장합니다'))
 
     def _update_preview(self, *_args) -> None:
         prefix = self.prefix_edit.text().strip() or "serialhub"

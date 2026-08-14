@@ -263,6 +263,10 @@ def main() -> int:  # noqa: PLR0915
     config_mod.PROFILE_DIR = os.path.join(tmp, "profiles")
     config_mod.SETTINGS_PATH = os.path.join(tmp, "settings.json")
     diag_mod.diag.reconfigure()  # DATA_DIR 재지정 후 옛 핸들러를 닫고 다시 연다
+    # 이 스위트의 단언 문구는 한국어 UI 기준이다. 기본 표시 언어가 영어가 되면서(1.3.0)
+    # 설정이 빈 tmp 에서는 영어로 떠 전부 어긋난다 — 명시적으로 한국어를 지정한다.
+    from .core.i18n import set_language
+    set_language("ko")
 
     dut = VirtualDut()
     original_open, original_list = portscan.open_serial, portscan.list_ports
@@ -388,8 +392,8 @@ def main() -> int:  # noqa: PLR0915
         window.toggle_ansi_color()
         spin(app, 0.3)
         check("다시 켜면 색이 복원된다", colored_block_count() > 0)
-        day = time.strftime("%m%d")
-        mlog_file = os.path.join(profile.log_base_dir, day,
+        # 기본값은 날짜 하위 폴더 없이 base 에 바로 저장한다 (log_use_date_folder=False)
+        mlog_file = os.path.join(profile.log_base_dir,
                                  f"{window.session.session_name}_mlog.log")
         check("ANSI 이스케이프가 파일에도 없다",
               os.path.exists(mlog_file) and "\x1b" not in open(mlog_file, encoding="utf-8").read(),
@@ -464,7 +468,7 @@ def main() -> int:  # noqa: PLR0915
               f"{first_session} -> {split_session}")
         check("분절 후에도 수신이 계속된다",
               wait_for(app, lambda: os.path.exists(
-                  os.path.join(profile.log_base_dir, day, f"{split_session}_mlog.log"))))
+                  os.path.join(profile.log_base_dir, f"{split_session}_mlog.log"))))
 
         # 트리거: MLOG 에 WDOG 이벤트 주입
         base_total = window.trigger_watcher.total()
@@ -579,7 +583,7 @@ def main() -> int:  # noqa: PLR0915
               len(restored) == 2 and restored[0] > restored[1], str(restored))
 
         # 버퍼 지우기 — 화면·ring 은 비고 파일은 남는다
-        merged_before = os.path.join(profile.log_base_dir, day,
+        merged_before = os.path.join(profile.log_base_dir,
                                      f"{window.session.store.session_name}_all.log")
         window.session.store.flush()
         size_before = os.path.getsize(merged_before) if os.path.exists(merged_before) else 0
@@ -684,7 +688,7 @@ def main() -> int:  # noqa: PLR0915
         window.toggle_recording_pause()          # 재개
         check("재개 후 새 위치에 파일이 쌓인다",
               wait_for(app, lambda: os.path.exists(
-                  os.path.join(new_dir, day, os.path.basename(store.file_paths()["MLOG"])))
+                  os.path.join(new_dir, os.path.basename(store.file_paths()["MLOG"])))
                   and os.path.getsize(store.file_paths()["MLOG"]) > 0, timeout=6.0),
               str(store.file_paths().get("MLOG")))
         check("옛 위치 파일은 그대로 남는다", os.path.exists(paused_path))
@@ -981,6 +985,95 @@ def main() -> int:  # noqa: PLR0915
             check(f"파일에 기록된 줄이 수신량 이상 (증분 {written})",
                   written >= received, f"파일 증분 {written} < 수신 {received}")
         dut.paused.clear()
+
+        # ------------------------------------------------- S8b 덮어쓰기 확인 · 날짜 폴더
+        print("\n== S8b. 같은 이름 파일 존재 시 — 덮어쓰기/이어쓰기/취소 ==")
+        from PySide6.QtWidgets import QDialog
+        from .ui.log_start_dialog import LogStartDialog
+
+        window.stop_logging()
+        spin(app, 0.3)
+        over_dir = os.path.join(tmp, "overwrite_check")
+        log_page.dir_edit.setText(over_dir)
+        log_page.include_box.setChecked(False)       # 고정 파일명 = 충돌이 가장 잘 나는 설정
+        log_page.date_folder_box.setChecked(False)
+        log_page.port_edits["MLOG"].setText("fixed")
+        log_page.commit()
+        os.makedirs(over_dir, exist_ok=True)
+        fixed_path = os.path.join(over_dir, "fixed.log")
+        with open(fixed_path, "w", encoding="utf-8") as fh:
+            fh.write("OLD LINE\n")
+
+        original_start_exec = LogStartDialog.exec
+        LogStartDialog.exec = lambda _self: QDialog.Accepted   # 시작 확인 창은 자동 통과
+        asked: list[list[str]] = []
+
+        def choose(answer: str):
+            def _choose(existing: list[str]) -> str:
+                asked.append(list(existing))
+                return answer
+            return _choose
+
+        try:
+            window._ask_overwrite = choose("cancel")
+            started = window.start_logging()
+            check("[취소] 를 고르면 기록을 시작하지 않는다", not started and not store.recording)
+            check("모달에 기존 파일 목록이 전달된다",
+                  bool(asked) and any(p.endswith("fixed.log") for p in asked[-1]), str(asked))
+
+            window._ask_overwrite = choose("append")
+            started = window.start_logging()
+            check("[이어쓰기] 를 고르면 기록이 시작된다", started and store.recording)
+            store.append("MLOG", "appended by uitest")
+            store.flush()
+            with open(fixed_path, encoding="utf-8", errors="replace") as fh:
+                body = fh.read()
+            check("이어쓰기는 기존 내용을 보존한다",
+                  "OLD LINE" in body and "appended by uitest" in body, body[:120])
+            window.stop_logging()
+
+            window._ask_overwrite = choose("overwrite")
+            started = window.start_logging()
+            check("[덮어쓰기] 를 고르면 기록이 시작된다", started and store.recording)
+            store.append("MLOG", "fresh by uitest")
+            store.flush()
+            with open(fixed_path, encoding="utf-8", errors="replace") as fh:
+                body = fh.read()
+            check("덮어쓴 파일에는 옛 내용이 없다",
+                  "OLD LINE" not in body and "fresh by uitest" in body, body[:120])
+            window.stop_logging()
+
+            def never_ask(_existing: list[str]) -> str:
+                raise AssertionError("ask=False 경로에서 덮어쓰기 모달이 호출됐다")
+
+            window._ask_overwrite = never_ask
+            started = window.start_logging(ask=False)   # 자동화/브리지 경로는 조용히 이어쓴다
+            check("ask=False 는 모달 없이 이어쓴다", started and store.recording)
+            store.append("MLOG", "auto append")
+            store.flush()
+            with open(fixed_path, encoding="utf-8", errors="replace") as fh:
+                body = fh.read()
+            check("ask=False 도 기존 내용을 보존한다",
+                  "fresh by uitest" in body and "auto append" in body, body[:160])
+        finally:
+            LogStartDialog.exec = original_start_exec
+            if "_ask_overwrite" in window.__dict__:
+                del window._ask_overwrite            # 인스턴스 속성을 걷어 원래 메서드로 복귀
+
+        # 날짜 폴더 옵션을 켜면 (기록 중 retarget 포함) MMDD 아래로 들어간다
+        log_page.date_folder_box.setChecked(True)
+        log_page.commit()
+        window.retarget_logs()
+        spin(app, 0.3)
+        day = time.strftime("%m%d")
+        check("날짜 폴더를 켜면 MMDD 아래에 기록한다",
+              os.path.normpath(store.log_dir or "") == os.path.normpath(os.path.join(over_dir, day)),
+              str(store.log_dir))
+        store.append("MLOG", "dated line")
+        store.flush()
+        check("날짜 폴더에 파일이 실제로 생긴다",
+              os.path.exists(os.path.join(over_dir, day, "fixed.log")),
+              str(os.listdir(over_dir)))
 
         # ---------------------------------------------------------- S9 종료·파일 검증
         print("\n== S9. 종료 — 로그 파일·진단 로그 ==")

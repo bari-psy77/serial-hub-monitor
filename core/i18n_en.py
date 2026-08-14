@@ -196,6 +196,13 @@ EN: dict[str, str] = {
     "기록 중지 — 파일 {0}개는 그대로 남아 있습니다":
         "Recording stopped — {0} file(s) are kept",
     "기록을 시작하지 않았습니다": "Recording was not started",
+    "같은 이름의 로그 파일이 있습니다": "Log files with the same name already exist",
+    "아래 파일이 이미 있습니다.\n\n{0}\n\n덮어쓰면 기존 내용이 지워집니다. "
+    "이어쓰면 기존 파일 끝에 계속 기록합니다.":
+        "These files already exist.\n\n{0}\n\nOverwrite erases their current contents. "
+        "Append keeps writing at the end of the existing files.",
+    "덮어쓰기": "Overwrite",
+    "이어쓰기": "Append",
     "기록은 [⏺ 로그 시작] 을 눌러야 시작됩니다":
         "press [⏺ Start log] to begin recording",
     "기록 중이 아닙니다 — [⏺ 로그 시작] 을 먼저 누르세요":
@@ -370,6 +377,10 @@ EN: dict[str, str] = {
         "devices with only one or two UARTs.",
     "이 아래에 날짜별(MMDD) 폴더가 자동으로 생깁니다":
         "Date folders (MMDD) are created under this automatically",
+    "날짜별(MMDD) 하위 폴더에 저장":
+        "Save into per-date (MMDD) subfolders",
+    "날짜 하위 폴더 없이 이 폴더에 바로 저장합니다":
+        "Files are saved directly in this folder (no date subfolder)",
     "끄면 <이름>.log 로 고정됩니다 — 매번 같은 파일에 이어 씁니다":
         "Turn this off for a fixed <name>.log — every run appends to the same file",
     "파일명에 세션 접두어 포함 (<접두어>_HHMMSS_<이름>.log)":

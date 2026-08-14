@@ -239,6 +239,7 @@ class LogStore:
         self._paused_dropped = 0
         self._names: dict[str, str] = {}     # 포트 -> 파일명 조각 (비면 역할명 소문자)
         self._include_session = True
+        self._use_date_folder = True         # 끄면 base_dir 에 바로 쓴다 (MMDD 하위 폴더 없음)
         # 파일 I/O 전용 스레드 — 디스크가 한 번 늦으면 reader 3개가 같이 멈추고
         # COM RX 버퍼가 넘쳐 수신이 유실된다. 큐 순서 = seq 순서 (락 안에서 넣는다).
         # ★실제 write() 는 _lock 밖에서 한다 — _service_lock 이 소비자(writer 스레드 /
@@ -274,8 +275,13 @@ class LogStore:
 
     # ------------------------------------------------------------------ 세션
 
-    def start_session(self, base_dir: str, session: str, ports: list[str]) -> None:
-        """포트별 파일 + 병합 파일을 연다. 이미 열려 있으면 닫고 새로 연다."""
+    def start_session(self, base_dir: str, session: str, ports: list[str],
+                      overwrite: bool = False) -> None:
+        """포트별 파일 + 병합 파일을 연다. 이미 열려 있으면 닫고 새로 연다.
+
+        overwrite=True 면 같은 이름의 기존 파일을 시작 시점에 지운다 — 사용자가
+        덮어쓰기를 명시적으로 골랐을 때만 쓴다 (기본은 이어쓰기).
+        """
         self.stop_session()
         with self._service_lock:
             # 파일 쪽 상태(_writers/_session/_part/_session_day/_base_dir)는 _service_lock 소유다
@@ -285,6 +291,8 @@ class LogStore:
             self._part = 1
             self._session_day = time.strftime("%m%d")
             self._open_writers(ports)
+            if overwrite:
+                self._remove_existing_targets()
         with self._lock:
             for port in ports:
                 self.register_port(port)
@@ -370,6 +378,8 @@ class LogStore:
     def _day_dir(self) -> str:
         if self._base_dir is None:
             raise RuntimeError(tr('세션이 시작되지 않았습니다 — start_session() 이 먼저입니다'))
+        if not self._use_date_folder:
+            return self._base_dir
         return os.path.join(self._base_dir, self._session_day or time.strftime("%m%d"))
 
     def set_file_naming(self, names: dict[str, str], include_session: bool = True) -> None:
@@ -378,9 +388,30 @@ class LogStore:
             self._names = {k: _safe_name(v) for k, v in names.items() if v}
             self._include_session = include_session
 
+    def set_use_date_folder(self, enabled: bool) -> None:
+        """날짜(MMDD) 하위 폴더 사용 여부. 다음 세션/분절부터 적용된다."""
+        with self._service_lock:
+            self._use_date_folder = bool(enabled)
+
+    def _named(self, session: str | None, piece: str) -> str:
+        return f"{session}_{piece}.log" if self._include_session else f"{piece}.log"
+
     def file_name_for(self, port: str) -> str:
-        piece = self._names.get(port) or port.lower()
-        return f"{self._session}_{piece}.log" if self._include_session else f"{piece}.log"
+        return self._named(self._session, self._names.get(port) or port.lower())
+
+    def plan_paths(self, base_dir: str, session: str, ports: list[str]) -> dict[str, str]:
+        """start_session 이 만들게 될 파일 경로를 미리 계산한다 — 파일·폴더는 만들지 않는다.
+
+        기록 시작 전 "같은 이름의 파일이 이미 있나" 검사(덮어쓰기 확인)에 쓴다.
+        """
+        with self._service_lock:
+            day_dir = (os.path.join(base_dir, time.strftime("%m%d"))
+                       if self._use_date_folder else base_dir)
+            paths = {port: os.path.join(day_dir, self._named(session, self._names.get(port) or port.lower()))
+                     for port in ports}
+            merged = self._names.get(MERGED_KEY) or "all"
+            paths[MERGED_KEY] = os.path.join(day_dir, self._named(session, merged))
+            return paths
 
     def _new_writer(self, port: str) -> _Writer:
         return _Writer(os.path.join(self._day_dir(), self.file_name_for(port)))
@@ -389,8 +420,7 @@ class LogStore:
         for port in ports:
             self._writers[port] = self._new_writer(port)
         merged = self._names.get(MERGED_KEY) or "all"
-        name = f"{self._session}_{merged}.log" if self._include_session else f"{merged}.log"
-        self._merged = _Writer(os.path.join(self._day_dir(), name))
+        self._merged = _Writer(os.path.join(self._day_dir(), self._named(self._session, merged)))
 
     def file_paths(self) -> dict[str, str]:
         """현재 기록 중인 파일 경로 (UI 에서 '열기' 에 쓴다)."""
@@ -406,6 +436,23 @@ class LogStore:
             if self._merged is not None:
                 sizes[MERGED_KEY] = self._merged.bytes_written
             return sizes
+
+    def _remove_existing_targets(self) -> None:
+        """덮어쓰기 시작 — 대상 경로의 기존 파일을 지운다 (writer 는 lazy 라 첫 줄에 새로 만든다).
+
+        트래픽이 안 와도 옛 내용이 남아 "덮어썼는데 예전 로그가 보인다" 는 혼동이 없어야
+        하므로, 첫 줄을 기다리지 않고 시작 시점에 지운다. 호출자가 _service_lock 소유.
+        """
+        targets = [writer.path for writer in self._writers.values()]
+        if self._merged is not None:
+            targets.append(self._merged.path)
+        for path in targets:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError as exc:
+                # 다른 도구가 물고 있으면 못 지운다 — 이어쓰기로 열리게 두고 기록은 계속한다
+                diag.error("logstore", f"덮어쓰기용 기존 파일 삭제 실패 {path}: {exc}")
 
     def _close_writers(self) -> None:
         for writer in self._writers.values():

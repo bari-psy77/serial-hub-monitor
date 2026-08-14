@@ -478,6 +478,83 @@ def test_log_features(tmp: str) -> None:
     store4.stop_session()
 
 
+def test_log_dir_options(tmp: str) -> None:
+    print("\n== 저장 위치 옵션 — 날짜 폴더 · 사전 경로 · 덮어쓰기 ==")
+    from .core.logstore import MERGED_KEY
+
+    # 날짜(MMDD) 하위 폴더를 끄면 save location 에 바로 저장한다
+    flat = os.path.join(tmp, "flatdir")
+    store = LogStore()
+    store.set_use_date_folder(False)
+    store.start_session(flat, "direct", ["MLOG"])
+    store.append("MLOG", "no date folder")
+    store.flush()
+    store.stop_session()
+    check("날짜 폴더 없이 지정 폴더에 바로 저장된다",
+          os.path.exists(os.path.join(flat, "direct_mlog.log")),
+          str(os.listdir(flat)) if os.path.exists(flat) else "폴더 없음")
+    check("MMDD 하위 폴더를 만들지 않는다",
+          not os.path.exists(os.path.join(flat, time.strftime("%m%d"))))
+
+    # plan_paths — 기록을 시작하면 만들어질 경로를 미리 계산한다 (덮어쓰기 확인용)
+    store2 = LogStore()
+    store2.set_use_date_folder(False)
+    store2.set_file_naming({"MLOG": "matter", MERGED_KEY: "merged"}, include_session=False)
+    plandir = os.path.join(tmp, "plandir")
+    plan = store2.plan_paths(plandir, "sess", ["MLOG"])
+    check("plan_paths 가 포트·병합 파일 경로를 준다",
+          plan.get("MLOG") == os.path.join(plandir, "matter.log")
+          and plan.get(MERGED_KEY) == os.path.join(plandir, "merged.log"), str(plan))
+    check("plan_paths 는 폴더·파일을 만들지 않는다", not os.path.exists(plandir))
+    store2.start_session(plandir, "sess", ["MLOG"])
+    store2.append("MLOG", "planned")
+    store2.flush()
+    store2.stop_session()
+    check("plan 경로 그대로 실제 파일이 생긴다",
+          os.path.exists(plan["MLOG"]) and os.path.exists(plan[MERGED_KEY]),
+          str(os.listdir(plandir)) if os.path.exists(plandir) else "폴더 없음")
+
+    # 날짜 폴더를 켠 상태(기본값)의 plan 도 실제 생성 규칙과 일치해야 한다
+    store2b = LogStore()
+    plan_dated = store2b.plan_paths(plandir, "dated", ["MLOG"])
+    check("날짜 폴더 사용 시 plan 에도 MMDD 가 들어간다",
+          plan_dated["MLOG"] == os.path.join(plandir, time.strftime("%m%d"), "dated_mlog.log"),
+          str(plan_dated))
+
+    # 덮어쓰기 — 기존 파일을 지우고 처음부터 새로 쓴다
+    over = os.path.join(tmp, "overdir")
+    os.makedirs(over, exist_ok=True)
+    fixed = os.path.join(over, "fixed.log")
+    with open(fixed, "w", encoding="utf-8") as fh:
+        fh.write("old contents\n")
+    store3 = LogStore()
+    store3.set_use_date_folder(False)
+    store3.set_file_naming({"MLOG": "fixed", MERGED_KEY: "fixedall"}, include_session=False)
+    store3.start_session(over, "s1", ["MLOG"], overwrite=True)
+    check("덮어쓰기는 시작 시점에 기존 파일을 지운다 (트래픽이 없어도)",
+          not os.path.exists(fixed))
+    store3.append("MLOG", "fresh line")
+    store3.flush()
+    store3.stop_session()
+    with open(fixed, encoding="utf-8") as fh:
+        body = fh.read()
+    check("덮어쓴 파일에는 새 내용만 남는다",
+          "old contents" not in body and "fresh line" in body, repr(body))
+
+    # 기본은 이어쓰기 — 기존 증적을 조용히 지우지 않는다
+    store4 = LogStore()
+    store4.set_use_date_folder(False)
+    store4.set_file_naming({"MLOG": "fixed", MERGED_KEY: "fixedall"}, include_session=False)
+    store4.start_session(over, "s2", ["MLOG"])
+    store4.append("MLOG", "appended line")
+    store4.flush()
+    store4.stop_session()
+    with open(fixed, encoding="utf-8") as fh:
+        body = fh.read()
+    check("기본 동작은 이어쓰기 — 기존 내용이 보존된다",
+          "fresh line" in body and "appended line" in body, repr(body))
+
+
 def test_redact() -> None:
     print("\n== redact ==")
     redactor = Redactor([
@@ -713,6 +790,12 @@ def test_profile(tmp: str) -> None:
         check("기존 프로파일의 로그 위치는 설치값이 덮어쓰지 않는다",
               Profile.from_dict({"log_base_dir": r"E:\kept"}).log_base_dir == r"E:\kept")
 
+        # 날짜(MMDD) 하위 폴더는 옵션이다 — 기본은 save location 에 바로 저장 (사용자 합의)
+        check("날짜 하위 폴더 저장은 기본 꺼짐", Profile().log_use_date_folder is False)
+        check("날짜 폴더 설정 왕복",
+              Profile.from_dict({"log_use_date_folder": True}).log_use_date_folder is True
+              and Profile.from_dict({}).log_use_date_folder is False)
+
         # 화면 언어: 설정이 없으면 영어가 기본, settings.json 에 적어둔 값은 그대로 존중
         config_mod.save_settings({})
         check("언어 미지정이면 기본값은 영어", config_mod.language() == "en", config_mod.language())
@@ -760,6 +843,12 @@ def test_session(tmp: str) -> None:
     try:
         name = session.start_recording()
         check("세션명 자동 생성", name.startswith(profile.session_prefix), name)
+        planned = session.plan_recording(name)
+        actual = session.store.file_paths()
+        check("plan_recording 이 실제 기록 경로와 일치한다",
+              planned.get("MLOG") == actual.get("MLOG"), f"{planned} vs {actual}")
+        check("프로파일 기본값은 날짜 폴더 없이 base 에 바로 기록한다",
+              os.path.dirname(actual.get("MLOG", "")) == tmp, str(actual))
         results = session.connect_all()
         check("COM 미지정 포트는 건너뛴다", len(results) == 1, str(results))
         check("연결 상태 조회", wait_until(lambda: session.is_connected("MLOG")))
@@ -852,6 +941,27 @@ def test_gui(tmp: str) -> None:
     pump(app)
     check("입력 중 redact 미리보기", "hunter2pass" not in window.command_panel.hint.text(),
           window.command_panel.hint.text())
+
+    # 로그 저장 옵션 — 날짜 폴더 체크박스도 [확인](commit) 을 거쳐야 반영된다
+    from .ui.log_page import LogPage
+    lp_profile = Profile()
+    lp_profile.log_base_dir = tmp
+    log_page = LogPage(lp_profile)
+    check("날짜 폴더 체크박스 기본값은 프로파일(꺼짐)을 따른다",
+          not log_page.date_folder_box.isChecked())
+    hint_off = log_page.dir_hint.text()
+    log_page.date_folder_box.setChecked(True)
+    hint_on = log_page.dir_hint.text()
+    check("체크 상태에 따라 저장 위치 안내문이 바뀐다", hint_off != hint_on and bool(hint_on),
+          f"{hint_off!r} / {hint_on!r}")
+    check("입력만으로는 프로파일에 반영되지 않는다", lp_profile.log_use_date_folder is False)
+    log_page.commit()
+    check("commit 하면 날짜 폴더 설정이 프로파일에 반영된다",
+          lp_profile.log_use_date_folder is True)
+    log_page.date_folder_box.setChecked(False)
+    log_page.revert()
+    check("revert 하면 프로파일 값으로 되돌아간다", log_page.date_folder_box.isChecked())
+
 
     for mode in ("columns", "tabs", "merged", "split"):
         window._apply_layout(mode)
@@ -1119,6 +1229,7 @@ def main() -> int:
         test_rotation_and_marker(tmp)
         test_review_regressions(tmp)
         test_log_features(tmp)
+        test_log_dir_options(tmp)
         test_concurrent_load(tmp)
         test_redact()
         test_filters()

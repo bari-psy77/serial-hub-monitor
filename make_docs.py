@@ -316,7 +316,8 @@ def compose() -> None:
 (VS Code Serial Monitor + Tera Term + MobaXterm), and ① you could not see all three on one
 screen, ② you could not filter for just the values you cared about, and ③ saving a log
 meant stopping reception. Serial Hub replaces all three.</p>
-{img('monitor', 'Main window — all three consoles on one screen (MLOG left, SHELL top right, UCLI bottom right)')}
+{img('monitor',
+     'Main window — all three consoles on one screen (MLOG left, SHELL top right, UCLI bottom right)')}
 <ul>
 <li><b>3 ports at once</b> — each port gets its own color and prefix; a merged view can
 interleave them in time order</li>
@@ -480,12 +481,16 @@ press [Connect] again.</p>""")
 이 창은 <b>누를 때마다</b> 뜬다 — 앱을 다시 켰든 설정을 안 만졌든, 이번 기록이 어디에 어떤
 이름으로 남는지 매번 눈으로 확인하게 하려는 것이다. <b>[⏹ 로그 중지]</b> 로 언제든 닫는다.</div>
 <p>시작하면 포트별 파일과 시간순 병합 파일이 <b>동시에</b> 기록된다.</p>
-<pre><code>&lt;로그 폴더&gt;\\&lt;MMDD&gt;\\&lt;세션&gt;_mlog.log    [2026-08-04 03:19:12.165] &lt;본문&gt;
-&lt;로그 폴더&gt;\\&lt;MMDD&gt;\\&lt;세션&gt;_shell.log
-&lt;로그 폴더&gt;\\&lt;MMDD&gt;\\&lt;세션&gt;_ucli.log
-&lt;로그 폴더&gt;\\&lt;MMDD&gt;\\&lt;세션&gt;_all.log     [03:19:12 + 123.4s] [MLOG] &lt;본문&gt;</code></pre>
-<p>포트별 파일은 기존 Tera Term / VS Code 저장 로그와, 병합 파일은 기존
-<code>run_*.py</code> transcript 와 형식이 같다 — 지금까지 쓰던 grep 이 그대로 먹는다.</p>
+<pre><code>&lt;로그 폴더&gt;\\&lt;세션&gt;_mlog.log    [2026-08-04 03:19:12.165] &lt;본문&gt;
+&lt;로그 폴더&gt;\\&lt;세션&gt;_shell.log
+&lt;로그 폴더&gt;\\&lt;세션&gt;_ucli.log
+&lt;로그 폴더&gt;\\&lt;세션&gt;_all.log     [03:19:12 + 123.4s] [MLOG] &lt;본문&gt;</code></pre>
+<p>기본은 로그 폴더에 바로 저장이고, 설정에서 <b>날짜별(MMDD) 하위 폴더에 저장</b>을 켜면
+<code>&lt;로그 폴더&gt;\\&lt;MMDD&gt;\\</code> 아래로 들어간다. 포트별 파일은 기존 Tera Term /
+VS Code 저장 로그와, 병합 파일은 기존 <code>run_*.py</code> transcript 와 형식이 같다 —
+지금까지 쓰던 grep 이 그대로 먹는다.</p>
+<div class="note"><b>같은 이름의 파일이 이미 있으면</b> 시작 전에 물어본다 —
+<b>덮어쓰기 / 이어쓰기 / 취소</b> 중 고를 수 있고, 기본 버튼은 안전한 이어쓰기다.</div>
 <h3>기록 멈춤 / 재개</h3>
 {img('paused', '기록을 멈추면 REC 표시가 노랑으로 바뀐다 — 수신·화면은 계속된다')}
 <p><kbd>Ctrl</kbd>+<kbd>P</kbd> 또는 <b>⏸ 기록멈춤</b>. <b>파일 기록만</b> 멈추고 화면·수신은
@@ -511,7 +516,8 @@ press [Connect] again.</p>""")
 <li><b>세션 분절</b> (<kbd>Ctrl</kbd>+<kbd>N</kbd>) — 연결을 유지한 채 지금부터를 새 파일로.
 티켓에 작은 파일만 첨부할 때</li>
 <li><b>크기 회전</b> — 병합 파일이 200MB 를 넘으면 <code>_p2</code>, <code>_p3</code> … 자동 분절</li>
-<li><b>자정 전환</b> — 날짜가 바뀌면 새 날짜 폴더로 (수신 중단 없음)</li>
+<li><b>자정 전환</b> — 날짜가 바뀌면 새 날짜의 파일로 넘어간다 (날짜 폴더를 켰으면 새 MMDD
+폴더로, 껐으면 파일명에 날짜를 붙여서 — 수신 중단 없음)</li>
 <li><b>로그 파일 열기</b> (파일 메뉴) — 기록 중인 파일을 크기와 함께 나열, 여는 순간 flush</li>
 <li><b>복사본 저장</b> — 기록을 이어가면서 지금까지를 다른 폴더로 복사 (첨부용)</li>
 </ul>
@@ -528,13 +534,18 @@ recording goes and what it is called. Close the files at any time with
 <b>[⏹ Stop log]</b>.</div>
 <p>Once started, per-port files and a time-ordered merged file are written
 <b>simultaneously</b>.</p>
-<pre><code>&lt;log folder&gt;\\&lt;MMDD&gt;\\&lt;session&gt;_mlog.log    [2026-08-04 03:19:12.165] &lt;text&gt;
-&lt;log folder&gt;\\&lt;MMDD&gt;\\&lt;session&gt;_shell.log
-&lt;log folder&gt;\\&lt;MMDD&gt;\\&lt;session&gt;_ucli.log
-&lt;log folder&gt;\\&lt;MMDD&gt;\\&lt;session&gt;_all.log     [03:19:12 + 123.4s] [MLOG] &lt;text&gt;</code></pre>
-<p>Per-port files match your existing Tera Term / VS Code saved logs; the merged file
+<pre><code>&lt;log folder&gt;\\&lt;session&gt;_mlog.log    [2026-08-04 03:19:12.165] &lt;text&gt;
+&lt;log folder&gt;\\&lt;session&gt;_shell.log
+&lt;log folder&gt;\\&lt;session&gt;_ucli.log
+&lt;log folder&gt;\\&lt;session&gt;_all.log     [03:19:12 + 123.4s] [MLOG] &lt;text&gt;</code></pre>
+<p>By default files go directly into the log folder; enable <b>Save into per-date (MMDD)
+subfolders</b> in the settings to nest them under <code>&lt;log folder&gt;\\&lt;MMDD&gt;\\</code>.
+Per-port files match your existing Tera Term / VS Code saved logs; the merged file
 matches the existing <code>run_*.py</code> transcripts — the greps you already use keep
 working.</p>
+<div class="note"><b>If files with the same name already exist</b>, you are asked before
+recording starts — <b>Overwrite / Append / Cancel</b>, with the safe Append as the default
+button.</div>
 <h3>Pausing / resuming recording</h3>
 {img('paused', 'While recording is paused the REC indicator turns yellow — reception and the view continue')}
 <p><kbd>Ctrl</kbd>+<kbd>P</kbd> or <b>⏸ Pause</b>. Only <b>file writing</b> stops; the view
@@ -544,7 +555,8 @@ marked in each port file like this:</p>
 !! recording resumed — 1,234 line(s) during the pause are not in this file</code></pre>
 <p>So a gap in the timestamps explains itself when someone opens just the file later.</p>
 <h3>Changing the location and file names</h3>
-{img('logsetting', 'Settings > Log — folder, session prefix, per-port log names, merged file name, rotation size')}
+{img('logsetting',
+     'Settings > Log — folder, session prefix, per-port log names, merged file name, rotation size')}
 <p>Under <b>[📁 Log]</b>, set the <b>log folder</b>, the <b>session prefix</b>, the per-port
 <b>log names</b>, the <b>merged (all) file name</b>, whether to <b>include the session
 prefix</b>, and the <b>rotation size</b>. A preview of the resulting file names updates as
@@ -565,8 +577,9 @@ written stay where they were (the app never moves evidence). The status line say
 staying connected. For attaching only a small file to a ticket</li>
 <li><b>Size rotation</b> — the merged file splits into <code>_p2</code>, <code>_p3</code> …
 past 200 MB</li>
-<li><b>Midnight rollover</b> — when the date changes, recording moves to the new date folder
-(no interruption)</li>
+<li><b>Midnight rollover</b> — when the date changes, recording moves on to the new day's
+files (into a new MMDD folder when date subfolders are on, otherwise with the new date
+appended to the file names — no interruption)</li>
 <li><b>Open log file</b> (File menu) — lists the files being written with their sizes,
 flushing on open</li>
 <li><b>Save a copy</b> — copies everything so far to another folder while recording
@@ -620,7 +633,8 @@ are kept</td></tr>
 <tr><td><code>⧉</code></td><td>Pop out into its own window
 (<kbd>Ctrl</kbd>+<kbd>D</kbd>)</td></tr></table>
 <h3>Pop-out windows — multiple monitors</h3>
-{img('popout', 'A popped-out console can go full-size on another monitor. Closing the window docks it back')}""")
+{img('popout',
+     'A popped-out console can go full-size on another monitor. Closing the window docks it back')}""")
 
     section("필터드뷰 — 원하는 것만 보기", f"""
 {img('filterview', '필터드뷰 — 매치되는 라인만 모아서 별도 창으로')}

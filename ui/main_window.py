@@ -927,16 +927,55 @@ class MainWindow(QMainWindow):
     def start_logging(self, ask: bool = True) -> bool:
         if self.session.store.recording:
             return True
+        overwrite = False
+        # 세션 이름은 여기서 한 번만 만든다 — 검사한 경로와 실제 기록 경로가 같아야 한다
+        name = self.session.new_session_name()
         if ask:
             dialog = LogStartDialog(self.profile, self)
             if dialog.exec() != QDialog.Accepted:
                 self.set_status(tr('기록을 시작하지 않았습니다'), theme.TEXT_SUB)
                 return False
-        name = self.session.start_recording()
-        diag.info("app", f"기록 시작 (사용자) `{name}` dir={self.session.store.log_dir}")
+            name = self.session.new_session_name()   # 확인 창에서 접두어를 바꿨을 수 있다
+            existing = [path for path in self.session.plan_recording(name).values()
+                        if os.path.exists(path)]
+            if existing:
+                choice = self._ask_overwrite(existing)
+                if choice == "cancel":
+                    self.set_status(tr('기록을 시작하지 않았습니다'), theme.TEXT_SUB)
+                    return False
+                overwrite = choice == "overwrite"
+        # ask=False(자동화·브리지)는 묻지 않고 기존 동작대로 이어쓴다
+        name = self.session.start_recording(name, overwrite=overwrite)
+        diag.info("app", f"기록 시작 (사용자) `{name}` dir={self.session.store.log_dir}"
+                         f"{' overwrite' if overwrite else ''}")
         self.set_status(tr('기록 시작 — {0} ({1})').format(self.session.store.log_dir, name), theme.SUCCESS)
         self._update_rec_button()
         return True
+
+    def _ask_overwrite(self, existing: list[str]) -> str:
+        """같은 이름의 로그 파일이 이미 있을 때 — 덮어쓰기 / 이어쓰기 / 취소.
+
+        반환값 = "overwrite" | "append" | "cancel". 기본 버튼은 안전한 이어쓰기다.
+        """
+        names = "\n".join(os.path.basename(path) for path in existing[:6])
+        if len(existing) > 6:
+            names += "\n…"
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle(tr('같은 이름의 로그 파일이 있습니다'))
+        box.setText(tr('아래 파일이 이미 있습니다.\n\n{0}\n\n덮어쓰면 기존 내용이 지워집니다. '
+                       '이어쓰면 기존 파일 끝에 계속 기록합니다.').format(names))
+        overwrite_button = box.addButton(tr('덮어쓰기'), QMessageBox.DestructiveRole)
+        append_button = box.addButton(tr('이어쓰기'), QMessageBox.AcceptRole)
+        box.addButton(tr('취소'), QMessageBox.RejectRole)
+        box.setDefaultButton(append_button)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is overwrite_button:
+            return "overwrite"
+        if clicked is append_button:
+            return "append"
+        return "cancel"
 
     def stop_logging(self) -> None:
         if not self.session.store.recording:
