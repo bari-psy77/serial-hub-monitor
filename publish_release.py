@@ -25,6 +25,7 @@ DIST = os.path.join(HERE, "dist")
 ZIP_RE = re.compile(r"^SerialHub_(\d{8})\.zip$")
 # git@host:owner/repo.git · https://host/owner/repo.git 둘 다 — host 는 SSH 별칭일 수 있다
 SLUG_RE = re.compile(r"[:/]([\w.-]+)/([\w.-]+?)(?:\.git)?$")
+LF = chr(10)          # 여러 줄 안내문에 쓰는 줄바꿈
 
 
 class ReleaseError(RuntimeError):
@@ -115,11 +116,24 @@ def gh(args: list[str], *, check: bool = True, repo: str = "") -> subprocess.Com
     return result
 
 
-def ensure_auth() -> None:
+def ensure_auth() -> str:
+    """인증 확인 + **어느 계정으로 올리는지** 알려준다.
+
+    이 PC 는 회사 계정도 함께 쓴다 — 브라우저로 로그인하면 브라우저에 로그인돼 있는
+    그 계정으로 붙는다. 올리기 전에 계정 이름을 찍어 두면 엉뚱한 계정으로 올리는 것을
+    바로 알아챌 수 있다. 아무것도 저장하지 않으려면 GH_TOKEN 으로 1회용 토큰을 쓴다.
+    """
     result = gh(["auth", "status"], check=False)
     if result.returncode != 0:
-        raise ReleaseError("GitHub 로그인이 필요합니다 — 한 번만 `gh auth login` 을 실행하세요\n"
-                           f"{result.stderr.strip()}")
+        raise ReleaseError(
+            "GitHub 인증이 필요합니다. 둘 중 하나면 됩니다:" + LF
+            + "  1) 1회용 — 이 저장소에만 Contents:write 를 준 fine-grained 토큰을" + LF
+            + "     GH_TOKEN 환경변수로 넘기기 (아무것도 저장되지 않습니다)" + LF
+            + "  2) gh auth login — 다른 계정이 있어도 지워지지 않습니다" + LF
+            + "     (gh auth switch 로 전환, 브라우저 대신 토큰 붙여넣기 권장)" + LF
+            + result.stderr.strip())
+    who = gh(["api", "user", "-q", ".login"], check=False)
+    return who.stdout.strip() if who.returncode == 0 else "(계정 확인 실패)"
 
 
 def existing_releases(repo: str = "") -> list[dict]:
@@ -189,7 +203,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\n[dry-run] 태그 v{version} 로 올리고, "
                   f"{'옛 릴리스는 그대로 둡니다' if args.keep_old else '다른 릴리스는 지웁니다'}")
             return 0
-        ensure_auth()
+        account = ensure_auth()
+        token_used = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        print(f"계정 {account} ({'GH_TOKEN' if token_used else 'gh 로그인'})")
         repo = current_repo()
         print(f"저장소 {repo or '(원격에서 못 읽음 — gh 기본값 사용)'}")
         tag = publish(version, artifacts, release_notes(version),
