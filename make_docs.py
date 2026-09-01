@@ -703,7 +703,8 @@ being recorded.</div>""")
 <li><kbd>Tab</kbd> 자동완성이 그대로 동작한다 (<kbd>Shift</kbd>+<kbd>Tab</kbd> 은 역방향)</li>
 <li><kbd>Ctrl</kbd>+<kbd>V</kbd> 붙여넣기, 우클릭 메뉴에서 화면 전체 복사·재시작</li>
 <li>여러 개를 열면 하단에서 <b>탭으로 묶인다</b> — 폭이 좁아지지 않는다. 제목줄을 끌어
-떼어내면 <b>최소화·최대화 버튼이 있는 보통 창</b>이 된다 (로그 뷰어도 같다)</li>
+떼어내면 독립 창이 되고, 툴바의 <b>⛶</b> 로 최대화·복원한다 (도킹 중에 눌러도 바로 커진다).
+로그 뷰어도 같다</li>
 <li>셸이 종료되면 종료 코드를 배너로 보여주고 [재시작] 으로 새 셸을 연다</li>
 <li>도크를 닫으면 셸 프로세스도 함께 끝난다 — 백그라운드에 남지 않는다</li>
 </ul>
@@ -725,8 +726,9 @@ backwards)</li>
 <li><kbd>Ctrl</kbd>+<kbd>V</kbd> pastes; the right-click menu offers copy-whole-screen and
 restart</li>
 <li>Open several and they are <b>tabbed together</b> at the bottom instead of shrinking each
-other. Drag one out by its title bar and it becomes <b>a normal window with minimize and
-maximize buttons</b> (the log viewer behaves the same)</li>
+other. Drag one out by its title bar for a separate window, and use the <b>⛶</b> button in the
+toolbar to maximize or restore it (pressing it while docked detaches and enlarges in one go).
+The log viewer works the same way</li>
 <li>When the shell exits, its exit code is shown as a banner and [Restart] opens a fresh
 shell</li>
 <li>Closing the dock also ends the shell process — nothing lingers in the background</li>

@@ -1093,9 +1093,15 @@ def main() -> int:  # noqa: PLR0915
         dock.setFloating(True)
         spin(app, 0.2)
         check("도크는 떼어내 독립 창이 된다 (플로팅)", dock.isFloating())
-        check("떼어낸 뷰어 창에 최대화 버튼이 있다",
-              bool(dock.windowFlags() & _Qt.WindowMaximizeButtonHint), str(dock.windowFlags()))
-        check("떼어낸 뷰어 창이 계속 보인다", dock.isVisible())
+        check("뷰어 툴바에 최대화 버튼이 있다", hasattr(dock, "maximize_button"))
+        dock.maximize_button.click()
+        spin(app, 0.3)
+        check("최대화 버튼이 실제로 창을 키운다",
+              bool(dock.windowState() & _Qt.WindowMaximized), str(dock.windowState()))
+        check("최대화해도 뷰어가 살아 있다", dock in window.viewer_docks and dock.isVisible())
+        dock.maximize_button.click()
+        spin(app, 0.3)
+        check("다시 누르면 복원된다", not (dock.windowState() & _Qt.WindowMaximized))
         dock.close()
         spin(app, 0.3)
         check("도크를 닫으면 목록에서 빠진다", dock not in window.viewer_docks)

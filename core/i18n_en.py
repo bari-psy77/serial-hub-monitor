@@ -203,6 +203,8 @@ EN: dict[str, str] = {
     "[FAIL] 내장 터미널 사용 불가 (pywinpty/pyte): {0}":
         "[FAIL] embedded terminal unavailable (pywinpty/pyte): {0}",
     "[FAIL] 내장 터미널 점검 실패: {0!r}": "[FAIL] embedded terminal check failed: {0!r}",
+    "창 최대화 / 복원 — 도킹 중이면 떼어내서 키웁니다":
+        "Maximize / restore the window — a docked panel is detached first",
     "터미널 — PowerShell": "Terminal — PowerShell",
     "🖥 터미널": "🖥 Terminal",
     "PowerShell 터미널을 하단 도크로 엽니다": "Opens a PowerShell terminal as a bottom dock",

@@ -218,6 +218,8 @@ formats still open as plain text. You get the same search tools as filtered view
 (substring/regex/case), highlights and save-result. Opening several files merges
 them in time order with a checkbox per source. The viewer docks at the bottom of
 the main window; drag its title bar to float it — multiple viewers stack as tabs.
+The ⛶ button in its toolbar maximizes or restores the window (pressing it while
+docked detaches and enlarges in one go).
 Files are only read, never locked, so you can open a file that is still being
 recorded.
 
@@ -230,8 +232,8 @@ right and `PageUp`/`PageDown` walk back through past output; typing snaps back t
 the bottom, and `Tab` completion works as usual (`Shift+Tab` cycles backwards).
 `Ctrl+V` pastes, and the right-click menu offers copy-whole-screen and restart.
 Several terminals are tabbed together at the bottom; drag one out by its title bar
-and it becomes a normal window with minimize and maximize buttons (the log viewer
-behaves the same). Closing the dock also ends the shell process. **Admin mode**: an elevated (UAC)
+for a separate window and use the ⛶ button in the toolbar to maximize or restore it
+(the log viewer works the same way). Closing the dock also ends the shell process. **Admin mode**: an elevated (UAC)
 shell cannot be embedded, so the [Admin PowerShell (external window)] button
 launches an elevated window separately. The terminal screen is never written to
 the serial log files.

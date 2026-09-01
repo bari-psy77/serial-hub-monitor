@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (QApplication, QDockWidget, QHBoxLayout, QLabel, Q
 
 from ..core import terminal as terminal_core
 from ..core.i18n import tr
-from .dock_common import enable_maximize_when_floating
+from .dock_common import make_maximize_button
 
 # 기본 팔레트 — VS Code 터미널 계열. pyte 는 색을 이름("red")이나 hex("cd3131")로 준다.
 _DEFAULT_FG = QColor("#cccccc")
@@ -304,6 +304,8 @@ class TerminalDock(QDockWidget):
         self.restart_button = QPushButton(tr('재시작'))
         top.addWidget(self.admin_button)
         top.addWidget(self.restart_button)
+        self.maximize_button = make_maximize_button(self)
+        top.addWidget(self.maximize_button)
         top.addStretch(1)
         outer.addLayout(top)
 
@@ -327,7 +329,6 @@ class TerminalDock(QDockWidget):
             outer.addWidget(hint, 1)
             self.restart_button.setEnabled(False)
         self.admin_button.clicked.connect(lambda: terminal_core.launch_admin_shell())
-        enable_maximize_when_floating(self)
         self.setWidget(body)
 
     def pump(self) -> None:

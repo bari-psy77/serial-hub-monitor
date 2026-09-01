@@ -22,7 +22,7 @@ from ..core.i18n import tr
 from ..core.logfile import LARGE_WARN_BYTES, LogFileStore
 from ..core.logstore import TS_OFF
 from .console_pane import ConsolePane
-from .dock_common import enable_maximize_when_floating
+from .dock_common import make_maximize_button
 
 
 def confirm_large(parent, total_bytes: int) -> bool:
@@ -65,6 +65,7 @@ class LogViewerWidget(QWidget):
         row.addWidget(self.regex_box)
         row.addWidget(self.add_button)
         row.addWidget(self.save_button)
+        self.button_row = row          # 도크가 최대화 버튼을 여기에 덧붙인다
         outer.addLayout(row)
 
         self.sources_row = QHBoxLayout()
@@ -204,7 +205,8 @@ class LogViewerDock(QDockWidget):
         self.setObjectName(f"logviewer_dock_{LogViewerDock._serial}")
         self.viewer = LogViewerWidget(profile, paths, self)
         self.setWidget(self.viewer)
-        enable_maximize_when_floating(self)
+        self.maximize_button = make_maximize_button(self)
+        self.viewer.button_row.addWidget(self.maximize_button)
         names = [os.path.basename(path) for path in self.viewer.store.paths()]
         if names:
             shown = ", ".join(names[:3]) + ("…" if len(names) > 3 else "")

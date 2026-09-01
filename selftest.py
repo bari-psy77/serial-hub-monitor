@@ -1413,15 +1413,24 @@ def test_gui(tmp: str) -> None:
               first_dock.objectName() != second_dock.objectName(),
               f"{first_dock.objectName()} vs {second_dock.objectName()}")
 
-        # 떼어낸 도크는 보통 창처럼 최대화가 돼야 한다 — QDockWidget 기본은 닫기 버튼뿐이라
-        # 화면을 키울 방법이 없다 (실기 불편 신고)
-        second_dock.setFloating(True)
+        # 창을 키우는 길 — ★네이티브 프레임에 최대화 버튼을 붙이면(창 플래그 교체)
+        # 실제 버튼 클릭 때 Qt 가 도크를 파괴한다 (실기 재현). 우리 버튼으로 처리한다.
+        check("도크 툴바에 최대화 버튼이 있다", hasattr(second_dock, "maximize_button"))
+        second_dock.maximize_button.click()
         pump(app)
-        check("떼어낸 터미널 창에 최대화 버튼이 있다",
-              bool(second_dock.windowFlags() & Qt.WindowMaximizeButtonHint),
+        check("최대화 버튼이 떼어내서 최대화한다",
+              second_dock.isFloating()
+              and bool(second_dock.windowState() & Qt.WindowMaximized),
+              f"float={second_dock.isFloating()} state={second_dock.windowState()}")
+        check("최대화해도 도크가 살아 있다 (파괴되지 않는다)",
+              second_dock in window.terminal_docks and second_dock.isVisible())
+        second_dock.maximize_button.click()
+        pump(app)
+        check("다시 누르면 원래 크기로 돌아온다",
+              not (second_dock.windowState() & Qt.WindowMaximized))
+        check("창 플래그를 교체하지 않는다 (도크 파괴 원인)",
+              not (second_dock.windowFlags() & Qt.WindowMaximizeButtonHint),
               str(second_dock.windowFlags()))
-        check("떼어낸 창은 여전히 보인다 (창 플래그 교체 후 show 누락 방지)",
-              second_dock.isVisible())
         second_dock.setFloating(False)
         pump(app)
 
