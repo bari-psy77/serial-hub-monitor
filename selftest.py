@@ -763,7 +763,17 @@ def test_terminal_pty() -> None:
 
 def test_release_tooling(tmp: str) -> None:
     print("\n== 릴리스 배포 도구 (산출물 선택) ==")
-    from .publish_release import ReleaseError, find_artifacts
+    from .publish_release import ReleaseError, find_artifacts, repo_slug
+
+    # 원격이 SSH 별칭(git@github-bari:...)이어도 gh 가 저장소를 알아야 한다
+    check("SSH 별칭 원격에서 owner/repo 를 뽑는다",
+          repo_slug("git@github-bari:bari-psy77/serial-hub-monitor.git")
+          == "bari-psy77/serial-hub-monitor")
+    check("표준 SSH 원격도 같다",
+          repo_slug("git@github.com:owner/repo.git") == "owner/repo")
+    check("HTTPS 원격도 같다",
+          repo_slug("https://github.com/owner/repo.git") == "owner/repo")
+    check("알 수 없는 형식은 빈 문자열", repo_slug("file:///tmp/x") == "")
 
     dist = os.path.join(tmp, "reldist")
     os.makedirs(dist, exist_ok=True)

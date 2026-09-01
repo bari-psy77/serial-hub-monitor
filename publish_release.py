@@ -23,6 +23,8 @@ from dataclasses import dataclass
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.join(HERE, "dist")
 ZIP_RE = re.compile(r"^SerialHub_(\d{8})\.zip$")
+# git@host:owner/repo.git · https://host/owner/repo.git 둘 다 — host 는 SSH 별칭일 수 있다
+SLUG_RE = re.compile(r"[:/]([\w.-]+)/([\w.-]+?)(?:\.git)?$")
 
 
 class ReleaseError(RuntimeError):
@@ -74,6 +76,24 @@ def _listdir(path: str) -> list[str]:
 
 # ---------------------------------------------------------------- GitHub CLI
 
+def repo_slug(remote_url: str) -> str:
+    """원격 URL -> `owner/repo`.
+
+    이 벤치의 원격은 `git@github-bari:owner/repo.git` 처럼 **SSH 별칭**을 쓴다 —
+    gh 는 호스트가 github.com 이 아니면 저장소를 스스로 알아내지 못하므로 명시해 준다.
+    """
+    if not remote_url or remote_url.startswith("file:"):
+        return ""
+    match = SLUG_RE.search(remote_url.strip())
+    return f"{match.group(1)}/{match.group(2)}" if match else ""
+
+
+def current_repo() -> str:
+    result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True,
+                            text=True, cwd=HERE)
+    return repo_slug(result.stdout) if result.returncode == 0 else ""
+
+
 def gh_path() -> str:
     for candidate in ("gh", os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
                                           "GitHub CLI", "gh.exe")):
@@ -85,7 +105,9 @@ def gh_path() -> str:
     raise ReleaseError("GitHub CLI(gh)를 찾지 못했습니다 — winget install --id GitHub.cli")
 
 
-def gh(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
+def gh(args: list[str], *, check: bool = True, repo: str = "") -> subprocess.CompletedProcess:
+    if repo and args and args[0] == "release":
+        args = [*args, "--repo", repo]
     result = subprocess.run([gh_path(), *args], capture_output=True, text=True,
                             encoding="utf-8", errors="replace", cwd=HERE)
     if check and result.returncode != 0:
@@ -100,33 +122,36 @@ def ensure_auth() -> None:
                            f"{result.stderr.strip()}")
 
 
-def existing_releases() -> list[dict]:
-    result = gh(["release", "list", "--limit", "50", "--json", "tagName,name,createdAt"])
+def existing_releases(repo: str = "") -> list[dict]:
+    result = gh(["release", "list", "--limit", "50", "--json", "tagName,name,createdAt"],
+                repo=repo)
     try:
         return json.loads(result.stdout or "[]")
     except json.JSONDecodeError:
         return []
 
 
-def publish(version: str, artifacts: Artifacts, notes: str, prune: bool) -> str:
+def publish(version: str, artifacts: Artifacts, notes: str, prune: bool,
+            repo: str = "") -> str:
     tag = f"v{version}"
-    releases = existing_releases()
+    releases = existing_releases(repo)
     tags = {item.get("tagName") for item in releases}
 
     if tag in tags:
         # 같은 버전을 다시 올리는 경우 — 자산만 덮어쓴다 (--clobber)
-        gh(["release", "upload", tag, *artifacts.paths(), "--clobber"])
-        gh(["release", "edit", tag, "--notes", notes, "--latest"])
+        gh(["release", "upload", tag, *artifacts.paths(), "--clobber"], repo=repo)
+        gh(["release", "edit", tag, "--notes", notes, "--latest"], repo=repo)
     else:
         gh(["release", "create", tag, *artifacts.paths(),
-            "--title", f"Serial Hub {version}", "--notes", notes, "--latest"])
+            "--title", f"Serial Hub {version}", "--notes", notes, "--latest"], repo=repo)
 
     if prune:
         for item in releases:
             other = item.get("tagName")
             if other and other != tag:
                 # ★가장 최신만 남긴다 (사용자 합의) — 릴리스와 태그를 같이 지운다
-                gh(["release", "delete", other, "--yes", "--cleanup-tag"], check=False)
+                gh(["release", "delete", other, "--yes", "--cleanup-tag"],
+                   check=False, repo=repo)
                 print(f"  옛 릴리스 삭제: {other}")
     return tag
 
@@ -165,8 +190,12 @@ def main(argv: list[str] | None = None) -> int:
                   f"{'옛 릴리스는 그대로 둡니다' if args.keep_old else '다른 릴리스는 지웁니다'}")
             return 0
         ensure_auth()
-        tag = publish(version, artifacts, release_notes(version), prune=not args.keep_old)
-        url = gh(["release", "view", tag, "--json", "url", "-q", ".url"]).stdout.strip()
+        repo = current_repo()
+        print(f"저장소 {repo or '(원격에서 못 읽음 — gh 기본값 사용)'}")
+        tag = publish(version, artifacts, release_notes(version),
+                      prune=not args.keep_old, repo=repo)
+        url = gh(["release", "view", tag, "--json", "url", "-q", ".url"],
+                 repo=repo).stdout.strip()
         print(f"\n올렸습니다: {url}")
         return 0
     except ReleaseError as exc:
