@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (QApplication, QDockWidget, QHBoxLayout, QLabel, Q
 
 from ..core import terminal as terminal_core
 from ..core.i18n import tr
+from .dock_common import enable_maximize_when_floating
 
 # 기본 팔레트 — VS Code 터미널 계열. pyte 는 색을 이름("red")이나 hex("cd3131")로 준다.
 _DEFAULT_FG = QColor("#cccccc")
@@ -30,6 +31,7 @@ _KEY_SEQUENCES = {
     Qt.Key_Return: "\r", Qt.Key_Enter: "\r",
     Qt.Key_Backspace: "\x7f",
     Qt.Key_Tab: "\t",
+    Qt.Key_Backtab: "\x1b[Z",   # Shift+Tab — 셸의 역방향 자동완성
     Qt.Key_Escape: "\x1b",
     Qt.Key_Up: "\x1b[A", Qt.Key_Down: "\x1b[B",
     Qt.Key_Right: "\x1b[C", Qt.Key_Left: "\x1b[D",
@@ -196,6 +198,16 @@ class TerminalPane(QWidget):
 
     # ------------------------------------------------------------------ 입력
 
+    def focusNextPrevChild(self, _next: bool) -> bool:  # noqa: N802 - Qt 시그니처
+        """Tab 을 포커스 이동에 뺏기지 않는다.
+
+        ★QWidget.event() 는 keyPressEvent **앞에서** Tab/Shift+Tab 을 가로채
+        focusNextPrevChild() 를 부른다. 그게 True 를 돌려주면 키는 거기서 끝나고,
+        터미널에서는 셸 자동완성이 통째로 죽는다 (실기 신고 — 도크의 버튼으로 포커스만
+        옮겨갔다). False 를 돌려주면 Tab 이 keyPressEvent 로 내려온다.
+        """
+        return False
+
     def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt 시그니처
         if event.matches(QKeySequence.Paste) or (
                 event.key() == Qt.Key_Insert and event.modifiers() & Qt.ShiftModifier):
@@ -315,6 +327,7 @@ class TerminalDock(QDockWidget):
             outer.addWidget(hint, 1)
             self.restart_button.setEnabled(False)
         self.admin_button.clicked.connect(lambda: terminal_core.launch_admin_shell())
+        enable_maximize_when_floating(self)
         self.setWidget(body)
 
     def pump(self) -> None:

@@ -1302,6 +1302,34 @@ def test_gui(tmp: str) -> None:
         check("화살표는 VT 시퀀스로 간다", stub.written[-1] == "\x1b[A", repr(stub.written[-1]))
         _press(Qt.Key_C, "\x03", Qt.KeyboardModifier.ControlModifier)
         check("Ctrl+C 는 제어 바이트로 간다", stub.written[-1] == "\x03", repr(stub.written[-1]))
+        # ★Tab 은 Qt 가 keyPressEvent 앞에서 포커스 이동으로 가로챈다 — 셸 자동완성이
+        #   안 먹던 실기 문제. **형제 위젯이 포커스를 받을 수 있을 때만** 재현되므로
+        #   실제 도크와 같은 구성(버튼 + 터미널)에서 확인한다.
+        from PySide6.QtWidgets import QPushButton as _QPushButton
+        from PySide6.QtWidgets import QVBoxLayout as _QVBoxLayout
+        from PySide6.QtWidgets import QWidget as _QWidget
+        holder = _QWidget()
+        holder_layout = _QVBoxLayout(holder)
+        holder_layout.addWidget(_QPushButton("Restart"))
+        tab_stub = _EchoSession()
+        tab_pane = term_mod.TerminalPane(tab_stub, holder)
+        holder_layout.addWidget(tab_pane)
+        holder.show()
+        tab_pane.setFocus()
+        pump(app)
+        app.sendEvent(tab_pane, _QKeyEvent(_QEvent.Type.KeyPress, Qt.Key_Tab,
+                                           Qt.KeyboardModifier.NoModifier, "\t"))
+        pump(app)
+        check("Tab 이 포커스 이동에 먹히지 않고 셸로 간다 (자동완성)",
+              tab_stub.written == ["\t"], str(tab_stub.written))
+        app.sendEvent(tab_pane, _QKeyEvent(_QEvent.Type.KeyPress, Qt.Key_Backtab,
+                                           Qt.KeyboardModifier.ShiftModifier, ""))
+        pump(app)
+        check("Shift+Tab 은 역방향 완성 시퀀스로 간다",
+              tab_stub.written[-1] == "\x1b[Z", repr(tab_stub.written[-1]))
+        holder.close()
+        holder.deleteLater()
+        pump(app)
         check("리사이즈가 세션 크기를 바꾼다", stub.buffer.cols > 40, str(stub.buffer.cols))
         frame = stub.buffer.snapshot()
         check("스냅샷 커서가 프레임에 있다", len(frame.cursor) == 3)
@@ -1384,6 +1412,18 @@ def test_gui(tmp: str) -> None:
         check("도크 이름이 서로 다르다 (배치 기억이 꼬이지 않게)",
               first_dock.objectName() != second_dock.objectName(),
               f"{first_dock.objectName()} vs {second_dock.objectName()}")
+
+        # 떼어낸 도크는 보통 창처럼 최대화가 돼야 한다 — QDockWidget 기본은 닫기 버튼뿐이라
+        # 화면을 키울 방법이 없다 (실기 불편 신고)
+        second_dock.setFloating(True)
+        pump(app)
+        check("떼어낸 터미널 창에 최대화 버튼이 있다",
+              bool(second_dock.windowFlags() & Qt.WindowMaximizeButtonHint),
+              str(second_dock.windowFlags()))
+        check("떼어낸 창은 여전히 보인다 (창 플래그 교체 후 show 누락 방지)",
+              second_dock.isVisible())
+        second_dock.setFloating(False)
+        pump(app)
 
         from PySide6.QtWidgets import QDockWidget as _QDockWidget
         for dock in list(window.terminal_docks):

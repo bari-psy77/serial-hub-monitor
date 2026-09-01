@@ -22,6 +22,7 @@ from ..core.i18n import tr
 from ..core.logfile import LARGE_WARN_BYTES, LogFileStore
 from ..core.logstore import TS_OFF
 from .console_pane import ConsolePane
+from .dock_common import enable_maximize_when_floating
 
 
 def confirm_large(parent, total_bytes: int) -> bool:
@@ -203,6 +204,7 @@ class LogViewerDock(QDockWidget):
         self.setObjectName(f"logviewer_dock_{LogViewerDock._serial}")
         self.viewer = LogViewerWidget(profile, paths, self)
         self.setWidget(self.viewer)
+        enable_maximize_when_floating(self)
         names = [os.path.basename(path) for path in self.viewer.store.paths()]
         if names:
             shown = ", ".join(names[:3]) + ("…" if len(names) > 3 else "")

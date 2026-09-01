@@ -47,7 +47,6 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
 ko.DesktopIcon=바탕 화면에 바로가기 만들기
-ko.DemoIcon=데모 모드 바로가기도 만들기 (포트 없이 화면 확인)
 ko.RunSelfcheck=설치 상태 점검 실행 (권장)
 ko.LaunchApp={#AppName} 실행
 ko.KeepData=설정과 프로파일을 남겨 두겠습니까?%n%n[예] 를 누르면 다음에 다시 설치할 때 그대로 쓸 수 있습니다.%n(모든 사용자용으로 설치했다면 다른 계정의 설정은 지워지지 않습니다)
@@ -58,26 +57,20 @@ en.LogPageTitle=Log location
 en.LogPageSubtitle=Where should captured serial logs be stored?
 en.LogPageDesc=Logs are saved in this folder when you press [⏺ Start log].%nPer-date (MMDD) subfolders and other options can be changed any time in Settings > Log.
 en.DesktopIcon=Create a desktop shortcut
-en.DemoIcon=Also create a demo-mode shortcut (no serial port needed)
 en.RunSelfcheck=Run installation check (recommended)
 en.LaunchApp=Launch {#AppName}
 en.KeepData=Keep your settings and profiles?%n%n[Yes] lets a future install reuse them.
 ; 시작 메뉴 항목 이름 — 앱 기본 언어가 영어인데 여기가 한국어로 굳어 있었다.
 ; 가이드는 **파일명이 곧 번역 키**다 (앱의 F1 도움말과 같은 규칙).
-ko.DemoName={#AppName} (데모 모드)
-ko.DemoDesktopName={#AppName} (데모)
 ko.SelfcheckName=설치 상태 점검
 ko.GuideName=사용 설명서
 ko.GuideFile=SerialHub_사용설명서.html
-en.DemoName={#AppName} (demo mode)
-en.DemoDesktopName={#AppName} (demo)
 en.SelfcheckName=Installation check
 en.GuideName=User guide
 en.GuideFile=SerialHub_UserGuide_en.html
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:DesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "demoicon"; Description: "{cm:DemoIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 ; build_exe.py 산출물 전체. 실행 중 생기는 파일(프로파일·로그)은 제외한다
@@ -89,13 +82,11 @@ Source: "README.ko.md"; DestDir: "{app}"; DestName: "README.ko.md"; Flags: ignor
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
-Name: "{group}\{cm:DemoName}"; Filename: "{app}\{#AppExe}"; Parameters: "--demo"; Tasks: demoicon
 Name: "{group}\{cm:SelfcheckName}"; Filename: "{app}\{#AppExe}"; Parameters: "--selfcheck"
 ; F1 이 여는 것과 같은 HTML 가이드로 (예전엔 원본 마크다운 README 를 가리켰다)
 Name: "{group}\{cm:GuideName}"; Filename: "{app}\_internal\docs\{cm:GuideFile}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
-Name: "{autodesktop}\{cm:DemoDesktopName}"; Filename: "{app}\{#AppExe}"; Parameters: "--demo"; Tasks: demoicon
 
 [InstallDelete]
 ; 업그레이드 설치 시 옛 버전의 _internal 을 통째로 비운다. 새 파일을 덮어쓰기만 하면

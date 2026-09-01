@@ -227,9 +227,11 @@ recorded.
 cursor movement and screen clearing all work; pywinpty + pyte). The default shell
 is PowerShell starting in your home folder. The mouse wheel, the scrollbar on the
 right and `PageUp`/`PageDown` walk back through past output; typing snaps back to
-the bottom. `Ctrl+V` pastes, and the right-click menu offers copy-whole-screen and
-restart. Several terminals are tabbed together at the bottom. Closing the dock
-also ends the shell process. **Admin mode**: an elevated (UAC)
+the bottom, and `Tab` completion works as usual (`Shift+Tab` cycles backwards).
+`Ctrl+V` pastes, and the right-click menu offers copy-whole-screen and restart.
+Several terminals are tabbed together at the bottom; drag one out by its title bar
+and it becomes a normal window with minimize and maximize buttons (the log viewer
+behaves the same). Closing the dock also ends the shell process. **Admin mode**: an elevated (UAC)
 shell cannot be embedded, so the [Admin PowerShell (external window)] button
 launches an elevated window separately. The terminal screen is never written to
 the serial log files.
