@@ -106,13 +106,45 @@ def gh_path() -> str:
     raise ReleaseError("GitHub CLI(gh)를 찾지 못했습니다 — winget install --id GitHub.cli")
 
 
+def describe_args(args: list[str]) -> str:
+    """에러 메시지에 쓸 명령 요약 — 릴리스 노트 본문까지 쏟아내지 않는다."""
+    shown = []
+    skip_next = False
+    for arg in args:
+        if skip_next:
+            shown.append("<생략>")
+            skip_next = False
+            continue
+        if arg == "--notes":
+            shown.append(arg)
+            skip_next = True
+            continue
+        shown.append(os.path.basename(arg) if os.path.sep in arg else arg)
+    return " ".join(shown)
+
+
+def permission_hint(stderr: str) -> str:
+    """403 은 거의 항상 토큰 권한 문제다 — 무엇을 고쳐야 하는지 바로 알려준다."""
+    if "403" not in stderr and "not accessible" not in stderr:
+        return ""
+    return (
+        LF + "토큰 권한이 부족합니다 (인증은 됐지만 릴리스를 만들 수 없음)." + LF
+        + "  fine-grained 토큰: Repository access 에 serial-hub-monitor 를 넣고," + LF
+        + "    Repository permissions > Contents 를 Read and write 로 바꾸세요." + LF
+        + "    (릴리스는 Contents 권한이 관장합니다 — 저장 후 바로 적용됩니다)" + LF
+        + "  classic 토큰이라면 repo 스코프가 필요합니다 (비공개 저장소)."
+    )
+
+
 def gh(args: list[str], *, check: bool = True, repo: str = "") -> subprocess.CompletedProcess:
     if repo and args and args[0] == "release":
         args = [*args, "--repo", repo]
     result = subprocess.run([gh_path(), *args], capture_output=True, text=True,
                             encoding="utf-8", errors="replace", cwd=HERE)
     if check and result.returncode != 0:
-        raise ReleaseError(f"gh {' '.join(args)} 실패:\n{result.stderr.strip()}")
+        stderr = result.stderr.strip()
+        raise ReleaseError(f"gh {describe_args(args)} 실패:" + LF + stderr
+                           + permission_hint(stderr))
     return result
 
 

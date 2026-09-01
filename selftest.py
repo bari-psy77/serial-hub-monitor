@@ -808,6 +808,23 @@ def test_release_tooling(tmp: str) -> None:
         check("버전이 다르면 올리지 않는다", "1.4.0" in str(exc), str(exc))
 
 
+    # 403 은 거의 항상 토큰 권한 문제다 — 사용자가 무엇을 고칠지 알 수 있어야 한다
+    from .publish_release import describe_args, permission_hint
+    hint = permission_hint(
+        "HTTP 403: Resource not accessible by personal access token")
+    check("403 이면 토큰 권한 안내를 붙인다",
+          "Contents" in hint and "Read and write" in hint, hint)
+    check("다른 오류에는 권한 안내를 붙이지 않는다",
+          permission_hint("HTTP 404: Not Found") == "")
+    summary = describe_args(["release", "create", "v1.4.0",
+                             r"C:\dist\SerialHub_Setup_1.4.0.exe",
+                             "--notes", "아주 긴 릴리스 노트 " * 40])
+    check("에러 메시지에 릴리스 노트 본문을 쏟지 않는다",
+          "<생략>" in summary and len(summary) < 120, summary)
+    check("경로는 파일명만 남긴다",
+          "SerialHub_Setup_1.4.0.exe" in summary and "C:" not in summary, summary)
+
+
 def test_selfcheck() -> None:
     print("\n== --selfcheck (빌드 점검) ==")
     from .app import selfcheck, terminal_status
