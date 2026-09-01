@@ -10,7 +10,8 @@ a PowerShell terminal inside the same window.
 
 ## Installation (recommended)
 
-Run `dist/SerialHub_Setup_1.4.0.exe` to start the setup wizard. No Python required,
+Download `SerialHub_Setup_1.4.0.exe` from the [releases page](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) and run it to
+start the setup wizard (only the latest build is kept there). No Python required,
 and **no administrator rights required** (per-user install is the default).
 
 Wizard steps: language → notes → install location → Start Menu → **log location** →
@@ -33,7 +34,8 @@ unins000.exe /VERYSILENT /SUPPRESSMSGBOXES          # uninstall (settings are ke
 
 ## Portable use (no install)
 
-Unzip `dist/SerialHub_<date>.zip` and run `SerialHub.exe`. To keep the settings in
+Unzip `SerialHub_<date>.zip` from the [releases page](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) and run
+`SerialHub.exe`. To keep the settings in
 the folder and carry it around on a USB stick, create an empty `portable.txt` file
 next to the exe.
 
@@ -62,7 +64,13 @@ winget install --id JRSoftware.InnoSetup            # only needed to build the i
 python build_exe.py --zip        # folder-style exe + portable zip
 python build_installer.py        # installer (builds the exe first if missing)
 python build_exe.py --onefile    # single exe (~10 s startup, not recommended)
+
+python publish_release.py --dry-run   # show what would be uploaded
+python publish_release.py             # upload to GitHub releases (keeps only the latest)
 ```
+
+Binaries live in **GitHub releases**, never in the repository (`dist/` is
+gitignored). Sign in to the GitHub CLI once with `gh auth login` first.
 
 The setup wizard is configured in [installer.iss](installer.iss); the pre-install
 notes live in [installer_info.txt](installer_info.txt).

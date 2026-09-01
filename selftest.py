@@ -761,6 +761,43 @@ def test_terminal_pty() -> None:
           wait_until(lambda: not session2.alive, timeout=5.0))
 
 
+def test_release_tooling(tmp: str) -> None:
+    print("\n== 릴리스 배포 도구 (산출물 선택) ==")
+    from .publish_release import ReleaseError, find_artifacts
+
+    dist = os.path.join(tmp, "reldist")
+    os.makedirs(dist, exist_ok=True)
+
+    try:
+        find_artifacts(dist, "1.4.0")
+        check("산출물이 없으면 알려준다", False, "예외가 안 났다")
+    except ReleaseError as exc:
+        check("산출물이 없으면 알려준다", "Setup" in str(exc), str(exc))
+
+    setup = os.path.join(dist, "SerialHub_Setup_1.4.0.exe")
+    old_zip = os.path.join(dist, "SerialHub_20260814.zip")
+    new_zip = os.path.join(dist, "SerialHub_20260901.zip")
+    for path in (setup, old_zip, new_zip):
+        with open(path, "wb") as fh:
+            fh.write(b"x" * 16)
+    os.utime(old_zip, (time.time() - 600, time.time() - 600))
+
+    found = find_artifacts(dist, "1.4.0")
+    check("이 버전의 설치본을 고른다", found.installer == setup, found.installer)
+    check("포터블 zip 은 가장 최신 것만 고른다", found.portable == new_zip, found.portable)
+    check("배포 대상은 두 개뿐", len(found.paths()) == 2, str(found.paths()))
+
+    # 버전이 다른 설치본만 있으면 오해 없이 실패해야 한다 (옛 파일을 올리는 사고 방지)
+    os.remove(setup)
+    with open(os.path.join(dist, "SerialHub_Setup_1.3.0.exe"), "wb") as fh:
+        fh.write(b"x")
+    try:
+        find_artifacts(dist, "1.4.0")
+        check("버전이 다르면 올리지 않는다", False, "예외가 안 났다")
+    except ReleaseError as exc:
+        check("버전이 다르면 올리지 않는다", "1.4.0" in str(exc), str(exc))
+
+
 def test_selfcheck() -> None:
     print("\n== --selfcheck (빌드 점검) ==")
     from .app import selfcheck, terminal_status
@@ -1728,6 +1765,7 @@ def main() -> int:
         test_terminal_core()
         test_terminal_pty()
         test_selfcheck()
+        test_release_tooling(tmp)
         test_concurrent_load(tmp)
         test_redact()
         test_filters()

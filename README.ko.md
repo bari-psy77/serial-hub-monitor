@@ -9,7 +9,8 @@ VS Code Serial Monitor + Tera Term + MobaXterm 세 툴을 하나로 대체한다
 
 ## 설치 (권장)
 
-`dist/SerialHub_Setup_1.4.0.exe` 를 실행하면 설치 마법사가 뜬다. Python 을 깔
+[릴리스 페이지](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) 에서 `SerialHub_Setup_1.4.0.exe` 를 받아 실행하면 설치
+마법사가 뜬다 (항상 최신 버전 하나만 올려 둔다). Python 을 깔
 필요가 없고, **관리자 권한도 필요 없다**(기본이 사용자 단위 설치).
 
 마법사 단계: 언어 → 안내 → 설치 위치 → 시작 메뉴 → **로그 저장 위치** →
@@ -30,7 +31,8 @@ unins000.exe /VERYSILENT /SUPPRESSMSGBOXES          # 제거 (설정은 보존)
 
 ## 무설치(포터블) 실행
 
-`dist/SerialHub_<날짜>.zip` 을 풀고 `SerialHub.exe` 를 실행한다. 설정을 폴더에
+[릴리스 페이지](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) 의 `SerialHub_<날짜>.zip` 을 풀고 `SerialHub.exe` 를
+실행한다. 설정을 폴더에
 같이 두고 USB 로 들고 다니려면 exe 옆에 빈 `portable.txt` 파일을 만든다.
 
 ```
@@ -56,7 +58,13 @@ winget install --id JRSoftware.InnoSetup            # 설치 프로그램을 만
 python build_exe.py --zip        # 폴더형 exe + 포터블 zip
 python build_installer.py        # 설치 프로그램 (exe 없으면 먼저 빌드)
 python build_exe.py --onefile    # 단일 exe (기동 10초 안팎, 비권장)
+
+python publish_release.py --dry-run   # 무엇이 올라갈지 확인
+python publish_release.py             # GitHub 릴리스에 올리기 (최신 하나만 유지)
 ```
+
+배포물은 저장소가 아니라 **GitHub 릴리스**에만 둔다 (`dist/` 는 gitignore).
+처음 한 번은 `gh auth login` 으로 GitHub CLI 에 로그인해야 한다.
 
 설치 마법사 구성은 [installer.iss](installer.iss), 설치 전 안내문은
 [installer_info.txt](installer_info.txt) 에서 고친다.
