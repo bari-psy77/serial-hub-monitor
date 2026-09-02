@@ -11,7 +11,9 @@
 from __future__ import annotations
 
 import argparse
+import io
 import itertools
+import re
 import os
 import shutil
 import sys
@@ -823,6 +825,30 @@ def test_release_tooling(tmp: str) -> None:
           "<생략>" in summary and len(summary) < 120, summary)
     check("경로는 파일명만 남긴다",
           "SerialHub_Setup_1.4.0.exe" in summary and "C:" not in summary, summary)
+
+
+    # 릴리스 노트는 CHANGELOG 의 해당 버전 절을 그대로 쓴다
+    from .publish_release import read_version, release_notes
+    from . import __version__ as pkg_version
+
+    notes = release_notes(pkg_version)
+    check("릴리스 노트가 이 버전 절을 담는다",
+          notes.startswith(f"## {pkg_version}"), notes[:60])
+    check("릴리스 노트에 받는 파일 안내가 붙는다",
+          "SerialHub_Setup_" in notes and "--selfcheck" in notes, notes[-200:])
+    check("publish_release 가 읽는 버전이 패키지 버전과 같다",
+          read_version() == pkg_version, f"{read_version()} vs {pkg_version}")
+
+    # ★CHANGELOG 맨 위 절이 곧 이번 릴리스다 — 버전이 어긋나면 엉뚱한 노트가 올라간다
+    changelog = io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     "CHANGELOG.md"), encoding="utf-8").read()
+    heads = re.findall(r"^## (\S+)\s+—\s+(\S+)", changelog, re.M)
+    check("CHANGELOG 최상단 버전이 현재 버전과 같다",
+          bool(heads) and heads[0][0] == pkg_version,
+          str(heads[:2]))
+    check("CHANGELOG 최상단 항목에 날짜가 적혀 있다",
+          bool(heads) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", heads[0][1]),
+          str(heads[:1]))
 
 
 def test_selfcheck() -> None:

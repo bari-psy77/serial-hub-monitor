@@ -178,10 +178,17 @@ def existing_releases(repo: str = "") -> list[dict]:
 
 
 def publish(version: str, artifacts: Artifacts, notes: str, prune: bool,
-            repo: str = "") -> str:
+            repo: str = "", notes_only: bool = False) -> str:
     tag = f"v{version}"
     releases = existing_releases(repo)
     tags = {item.get("tagName") for item in releases}
+
+    if notes_only:
+        if tag not in tags:
+            raise ReleaseError(f"릴리스 {tag} 가 아직 없습니다 — 먼저 그냥 올리세요")
+        gh(["release", "edit", tag, "--notes", notes], repo=repo)
+        print("  릴리스 노트만 갱신했습니다 (자산은 그대로)")
+        return tag
 
     if tag in tags:
         # 같은 버전을 다시 올리는 경우 — 자산만 덮어쓴다 (--clobber)
@@ -223,6 +230,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="올리지 않고 계획만 출력")
     parser.add_argument("--keep-old", action="store_true",
                         help="옛 릴리스를 지우지 않는다 (기본은 최신 하나만 남김)")
+    parser.add_argument("--notes-only", action="store_true",
+                        help="자산은 그대로 두고 릴리스 노트만 다시 쓴다")
     args = parser.parse_args(argv)
 
     try:
@@ -232,8 +241,9 @@ def main(argv: list[str] | None = None) -> int:
         for path in artifacts.paths():
             print(f"  {os.path.basename(path)}  ({os.path.getsize(path) / 1024 / 1024:.0f} MB)")
         if args.dry_run:
-            print(f"\n[dry-run] 태그 v{version} 로 올리고, "
-                  f"{'옛 릴리스는 그대로 둡니다' if args.keep_old else '다른 릴리스는 지웁니다'}")
+            plan = ("릴리스 노트만 갱신합니다" if args.notes_only else f"태그 v{version} 로 올리고, "
+                    + ("옛 릴리스는 그대로 둡니다" if args.keep_old else "다른 릴리스는 지웁니다"))
+            print(f"\n[dry-run] {plan}")
             return 0
         account = ensure_auth()
         token_used = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
@@ -241,7 +251,8 @@ def main(argv: list[str] | None = None) -> int:
         repo = current_repo()
         print(f"저장소 {repo or '(원격에서 못 읽음 — gh 기본값 사용)'}")
         tag = publish(version, artifacts, release_notes(version),
-                      prune=not args.keep_old, repo=repo)
+                      prune=not args.keep_old, repo=repo,
+                      notes_only=args.notes_only)
         url = gh(["release", "view", tag, "--json", "url", "-q", ".url"],
                  repo=repo).stdout.strip()
         print(f"\n올렸습니다: {url}")
