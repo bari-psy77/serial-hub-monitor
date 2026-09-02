@@ -1959,6 +1959,25 @@ def test_theme() -> None:
               != theme_mod.PALETTES["dark"]["SELECTION_BG"])
         check("버튼 포커스 테두리 규칙이 있다 (포커스가 가면 안 보이던 문제)",
               "QPushButton:focus" in dark_qss)
+
+        # ★기동 경로 회귀 가드 — app.py 는 theme.set_theme() 하나만 부른다.
+        #   여기서 로그·하이라이트 팔레트가 같이 안 바뀌면 **다크로 켰을 때** 밝은
+        #   하이라이트 위에 밝은 글자가 얹혀 글씨가 안 보인다 (실사용 신고)
+        from .core import ansi as ansi_check
+        from .core import filters as filters_check
+        check("theme.set_theme 이 로그 색 팔레트까지 바꾼다",
+              ansi_check.resolve("32") == ansi_check.PALETTES["dark"]["fg"][32],
+              ansi_check.resolve("32"))
+        check("theme.set_theme 이 하이라이트 팔레트까지 바꾼다",
+              filters_check.highlight_hex("빨강")
+              == filters_check.HIGHLIGHT_PALETTES["dark"]["빨강"],
+              filters_check.highlight_hex("빨강"))
+        theme_mod.set_theme("light")
+        check("되돌릴 때도 세 팔레트가 함께 간다",
+              ansi_check.resolve("32") == ansi_check.PALETTES["light"]["fg"][32]
+              and filters_check.highlight_hex("빨강")
+              == filters_check.HIGHLIGHT_PALETTES["light"]["빨강"])
+        theme_mod.set_theme("dark")
         check("상태 필 배경도 테마를 따른다",
               theme_mod.pill_tint(theme_mod.SUCCESS)
               != theme_mod.PALETTES["light"]["TINT_SUCCESS"],

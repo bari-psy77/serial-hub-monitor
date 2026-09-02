@@ -23,8 +23,6 @@ from ..core import config as config_mod
 from ..core.bridge import BridgeServer
 from ..core.config import Profile
 from ..core.diag import diag
-from ..core import ansi as ansi_mod
-from ..core import filters as filters_mod
 from ..core.filters import TriggerWatcher
 from ..core.logstore import MARKER_PORT, render_line
 from ..core.filters import FilterRule
@@ -892,9 +890,8 @@ class MainWindow(QMainWindow):
         """
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
+            # set_theme 이 로그 색(core.ansi)·하이라이트 색(core.filters)까지 함께 바꾼다
             applied = theme.set_theme(name)
-            ansi_mod.set_theme(applied)         # 로그 본문의 펌웨어 색
-            filters_mod.set_theme(applied)      # 하이라이트·검색 색
             app = QApplication.instance()
             if app is not None:
                 theme.apply_theme(app)

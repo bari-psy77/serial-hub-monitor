@@ -8,6 +8,8 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtCore import Qt, Signal
+from ..core import ansi
+from ..core import filters
 from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton,
                                QSizePolicy, QVBoxLayout, QWidget)
 
@@ -227,11 +229,18 @@ def set_theme(name: str) -> str:
 
     UI 모듈은 전부 `from . import theme` 로 **모듈 참조**를 쓰므로(theme.BG)
     여기서 전역을 바꾸면 그대로 따라온다. 값으로 임포트하면 안 되는 이유다.
+
+    ★로그 본문 색(core.ansi)과 하이라이트 색(core.filters)도 **여기서 함께** 바꾼다.
+    따로 부르게 두었더니 앱을 다크로 켰을 때 그 둘만 밝은 채로 남아, 연노랑 하이라이트
+    위에 밝은 글자가 얹혀 글씨가 안 보였다 (실사용 신고). 한 지점에서 묶어야 어긋나지
+    않는다.
     """
     global CURRENT, QSS
     CURRENT = name if name in PALETTES else "light"
     globals().update(PALETTES[CURRENT])
     QSS = build_qss()
+    ansi.set_theme(CURRENT)
+    filters.set_theme(CURRENT)
     return CURRENT
 
 
