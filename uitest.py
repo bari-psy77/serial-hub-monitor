@@ -939,6 +939,27 @@ def main() -> int:  # noqa: PLR0915
         check("필 본체 클릭은 여전히 포커스 이동이다",
               window.panes['SHELL'].isVisible())
 
+        # ------------------------------------------------- S6j 테마 전환 (수신 중)
+        print("\n== S6j. 테마 전환 — 수신 중 ==")
+        from .ui import theme as theme_mod
+        tail_before = window.panes["MLOG"].view.toPlainText()[-80:]
+        font_before = profile.console_font_size
+        window.apply_theme_change("dark")
+        spin(app, 0.6)
+        check("수신 중 전환해도 스크롤백이 남는다",
+              tail_before in window.panes["MLOG"].view.toPlainText(), tail_before[-40:])
+        check("전환해도 글자 크기가 유지된다",
+              window.panes["MLOG"].font_size() == font_before,
+              f'{window.panes["MLOG"].font_size()} vs {font_before}')
+        check("전환 후에도 새 라인이 계속 들어온다",
+              wait_for(app, lambda: "CASE metric" in
+                       window.panes["MLOG"].view.toPlainText(), timeout=6.0))
+        check("전환 후 tick 예외 없음", window.tick() is None)
+        check("기록도 계속된다", window.session.store.recording)
+        window.apply_theme_change("light")
+        spin(app, 0.4)
+        check("되돌리면 라이트", theme_mod.CURRENT == "light")
+
         # ---------------------------------------------------------- S7 재부팅 생존
         print("\n== S7. UCLI reboot — 단절·자동 재접속·부팅 배너 캡처 ==")
         panel.select_role("UCLI")

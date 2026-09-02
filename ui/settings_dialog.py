@@ -96,6 +96,11 @@ class SettingsDialog(QDialog):
         self.rules_page.rules_changed.connect(self.applied.emit)
         self.setStyleSheet(f"QDialog {{ background: {theme.BG}; }}")
 
+
+    def refresh_theme(self) -> None:
+        """생성 때 한 번만 바른 배경을 다시 바른다 (QSS 로 안 덮인다)."""
+        self.setStyleSheet(f"QDialog {{ background: {theme.BG}; }}")
+
     def go_to(self, page: int) -> None:
         self.nav.setCurrentRow(page)
         self.stack.setCurrentIndex(page)

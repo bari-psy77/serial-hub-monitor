@@ -59,9 +59,15 @@ class LineHighlighter(QSyntaxHighlighter):
         super().__init__(document)
         self._rules: list[tuple[re.Pattern, QTextCharFormat]] = []
         self.show_ansi = True
+        self.rules: list[HighlightRule] = []
         self.set_rules([])
 
     def set_rules(self, rules: list[HighlightRule]) -> None:
+        self.rules = list(rules)
+        self.rebuild_formats()
+
+    def rebuild_formats(self) -> None:
+        """포맷을 현재 팔레트로 다시 만든다 — 테마를 바꾸면 색이 전부 달라진다."""
         compiled: list[tuple[re.Pattern, QTextCharFormat]] = []
 
         tx_format = QTextCharFormat()
@@ -70,11 +76,11 @@ class LineHighlighter(QSyntaxHighlighter):
         compiled.append((re.compile(_TX_LINE_RE, re.MULTILINE), tx_format))
 
         banner_format = QTextCharFormat()
-        banner_format.setBackground(QColor("#FFF4C2"))
-        banner_format.setForeground(QColor("#8A6D00"))
+        banner_format.setBackground(QColor(theme.BANNER_BG))
+        banner_format.setForeground(QColor(theme.BANNER_TEXT))
         compiled.append((re.compile(_BANNER_LINE_RE, re.MULTILINE), banner_format))
 
-        for rule in rules:
+        for rule in self.rules:
             rx = rule.compiled()
             if rx is None:
                 continue
@@ -393,6 +399,15 @@ class ConsolePane(QWidget):
                 event.accept()
                 return
         super().wheelEvent(event)
+
+    def refresh_theme(self) -> None:
+        """테마 교체 후 다시 칠한다 — 캐시·정적 포맷·폰트를 순서대로 되살린다.
+
+        폰트는 여기서 건드리지 않는다 — repolish 직후 위젯에서 크기를 읽으면 무효값
+        (-1)이 나와 최소값으로 주저앉는다. 정본은 프로파일이므로 소유자가 다시 건다.
+        """
+        _SPAN_COLOR_CACHE.clear()
+        self.highlighter.rebuild_formats()   # rehighlight 까지 여기서 일어난다
 
     def set_font_size(self, point_size: int) -> None:
         """콘솔 폰트는 QSS 가 아니라 여기서만 정한다 (theme.py 주석 참조).

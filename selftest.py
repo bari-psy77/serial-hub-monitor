@@ -1246,6 +1246,8 @@ def test_gui(tmp: str) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
 
+    from .core import ansi as ansi_mod
+    from .core import filters as filters_mod
     from .core.filters import FilterRule as FR
     from .ui import theme
     from .ui.main_window import MainWindow
@@ -1352,6 +1354,37 @@ def test_gui(tmp: str) -> None:
     log_page.date_folder_box.setChecked(False)
     log_page.revert()
     check("revert 하면 프로파일 값으로 되돌아간다", log_page.date_folder_box.isChecked())
+
+    # 테마 전환 — QSS 재적용만으로 덮이지 않는 것들이 핵심이다
+    from .ui import theme as theme_mod
+    window.change_font(0)
+    window.change_font(4)                     # 12 -> 16 으로 키워 둔다
+    zoomed = profile.console_font_size
+    light_console_bg = theme_mod.CONSOLE_BG
+    light_pill = theme_mod.state_color("connected")
+
+    window.apply_theme_change("dark")
+    pump(app)
+    check("테마가 다크로 바뀐다", theme_mod.CURRENT == "dark", theme_mod.CURRENT)
+    check("콘솔 배경 토큰이 어두워진다", theme_mod.CONSOLE_BG != light_console_bg,
+          f"{light_console_bg} -> {theme_mod.CONSOLE_BG}")
+    check("상태 색도 새 팔레트를 쓴다", theme_mod.state_color("connected") != light_pill)
+    check("★전환해도 글자 크기가 유지된다 (repolish 가 setFont 를 되돌린다)",
+          mlog_pane.font_size() == zoomed, f"{mlog_pane.font_size()} vs {zoomed}")
+    check("로그 본문 색도 다크 팔레트를 쓴다",
+          ansi_mod.resolve("32") == ansi_mod.PALETTES["dark"]["fg"][32],
+          ansi_mod.resolve("32"))
+    check("하이라이트 색도 다크로 바뀐다",
+          filters_mod.highlight_hex("빨강") == filters_mod.HIGHLIGHT_PALETTES["dark"]["빨강"])
+    check("설정에 저장된다 (종료 후 다시 켜도 다크)", config_mod.theme() == "dark",
+          config_mod.theme())
+    check("전환 후에도 tick 이 예외 없이 돈다", window.tick() is None)
+
+    window.apply_theme_change("light")
+    pump(app)
+    check("되돌리면 원래 색", theme_mod.CONSOLE_BG == light_console_bg)
+    check("되돌려도 글자 크기는 그대로", mlog_pane.font_size() == zoomed)
+    window.change_font(0)
 
     # 상태 필 옆 연결 토글 버튼 — 필 본체 클릭은 포커스 이동 그대로
     check("포트마다 연결 토글 버튼이 있다",

@@ -14,12 +14,25 @@ from PySide6.QtWidgets import (QApplication, QDockWidget, QHBoxLayout, QLabel, Q
 
 from ..core import terminal as terminal_core
 from ..core.i18n import tr
+from . import theme
 from .dock_common import make_maximize_button
 
 # 기본 팔레트 — VS Code 터미널 계열. pyte 는 색을 이름("red")이나 hex("cd3131")로 준다.
+# 터미널도 테마를 따라간다 (사용자 결정). 라이트는 밝은 배경 + 어두운 글자.
+TERMINAL_PALETTES = {
+    "dark": {"fg": "#cccccc", "bg": "#101418"},
+    "light": {"fg": "#1F2328", "bg": "#FBFCFD"},
+}
 _DEFAULT_FG = QColor("#cccccc")
 _DEFAULT_BG = QColor("#101418")
-_ANSI_COLORS = {
+_ANSI_LIGHT = {
+    "black": "#1F2328", "red": "#B22222", "green": "#137333", "brown": "#8A6D00",
+    "blue": "#1A5FB4", "magenta": "#8E44AD", "cyan": "#0E7490", "white": "#5B6770",
+    "brightblack": "#6B7280", "brightred": "#D93025", "brightgreen": "#188038",
+    "brightbrown": "#B7791F", "brightblue": "#1967D2", "brightmagenta": "#A142F4",
+    "brightcyan": "#12869A", "brightwhite": "#202124",
+}
+_ANSI_DARK = {
     "black": "#000000", "red": "#cd3131", "green": "#0dbc79", "brown": "#e5e510",
     "blue": "#2472c8", "magenta": "#bc3fbc", "cyan": "#11a8cd", "white": "#e5e5e5",
     "brightblack": "#666666", "brightred": "#f14c4c", "brightgreen": "#23d18b",
@@ -51,10 +64,18 @@ def encode_key(event) -> str:
     return event.text()
 
 
-def _qcolor(name, default: QColor) -> QColor:
+def terminal_palette(theme_name: str) -> dict:
+    """터미널 셀 색표 — 테마를 따라간다."""
+    name = theme_name if theme_name in TERMINAL_PALETTES else "dark"
+    base = TERMINAL_PALETTES[name]
+    return {"fg": QColor(base["fg"]), "bg": QColor(base["bg"]),
+            "ansi": _ANSI_LIGHT if name == "light" else _ANSI_DARK}
+
+
+def _qcolor(name, default: QColor, table: dict | None = None) -> QColor:
     if not name or name == "default":
         return default
-    mapped = _ANSI_COLORS.get(name)
+    mapped = (table or _ANSI_DARK).get(name)
     if mapped is not None:
         return QColor(mapped)
     color = QColor(f"#{name}") if len(name) == 6 else QColor(name)
@@ -90,6 +111,7 @@ class TerminalPane(QWidget):
         # ★위젯 폰트(self.font())를 쓰면 안 된다 — 테마 QSS(font-family: UI_FONT)가
         #   polish 때 프로포셔널 폰트로 덮어써 격자 계산이 전부 어긋난다 (실기 확인).
         #   터미널 폰트는 멤버로 고정하고 메트릭·페인트에 직접 쓴다.
+        self.palette_colors = terminal_palette(theme.CURRENT)
         self._term_font = QFont()
         self._term_font.setFamilies(["Cascadia Mono", "Consolas", "D2Coding"])
         self._term_font.setStyleHint(QFont.Monospace)
@@ -157,7 +179,10 @@ class TerminalPane(QWidget):
     def paint_screen(self, target: QWidget, _event) -> None:
         """TerminalScreen 이 위임하는 실제 그리기 — 좌표계는 격자 원점(0,0)이다."""
         painter = QPainter(target)
-        painter.fillRect(target.rect(), _DEFAULT_BG)
+        default_fg = self.palette_colors["fg"]
+        default_bg = self.palette_colors["bg"]
+        ansi_table = self.palette_colors["ansi"]
+        painter.fillRect(target.rect(), default_bg)
         painter.setFont(self._term_font)
         cell_w, cell_h = self._cell_size()
         ascent = QFontMetricsF(self._term_font).ascent()
@@ -167,11 +192,11 @@ class TerminalPane(QWidget):
             for run in runs:
                 # ★len(text) 가 아니라 cells 로 전진한다 — 전각(한글)은 글자 1개 = 2칸
                 width = cell_w * run.cells
-                fg = _qcolor(run.fg, _DEFAULT_FG)
-                bg = _qcolor(run.bg, _DEFAULT_BG)
+                fg = _qcolor(run.fg, default_fg, ansi_table)
+                bg = _qcolor(run.bg, default_bg, ansi_table)
                 if run.reverse:
                     fg, bg = bg, fg
-                if bg != _DEFAULT_BG:
+                if bg != default_bg:
                     painter.fillRect(QRectF(x, y * cell_h, width, cell_h), bg)
                 if run.text.strip():
                     painter.setFont(bold_font if run.bold else self._term_font)
@@ -189,7 +214,7 @@ class TerminalPane(QWidget):
                 x += width
         cursor_x, cursor_y, cursor_visible = self._frame.cursor
         if cursor_visible and self._was_alive and (self.hasFocus() or self.screen.hasFocus()):
-            block = QColor(_DEFAULT_FG)
+            block = QColor(default_fg)
             block.setAlpha(170)
             painter.fillRect(QRectF(cursor_x * cell_w, cursor_y * cell_h, cell_w, cell_h),
                              block)
@@ -239,6 +264,11 @@ class TerminalPane(QWidget):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def refresh_theme(self) -> None:
+        """셀 색표를 새 테마로 바꾸고 다시 그린다."""
+        self.palette_colors = terminal_palette(theme.CURRENT)
+        self.screen.update()      # 폰트는 소유자가 프로파일 값으로 다시 건다
 
     def set_font_size(self, point_size: int) -> None:
         """터미널 격자 폰트 — 콘솔과 별개 값이다 (격자 계산이 폰트에 묶여 있다)."""
@@ -357,6 +387,10 @@ class TerminalDock(QDockWidget):
     def pump(self) -> None:
         if self.pane is not None:
             self.pane.pump()
+
+    def refresh_theme(self) -> None:
+        if self.pane is not None:
+            self.pane.refresh_theme()
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt 시그니처
         self.closed.emit(self)

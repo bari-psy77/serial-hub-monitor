@@ -264,6 +264,7 @@ class SegmentedTabs(QWidget):
     def __init__(self, labels: list[str], parent: QWidget | None = None):
         super().__init__(parent)
         holder = QFrame(self)
+        self._holder = holder
         holder.setStyleSheet(f"QFrame {{ background: {CARD_BG}; border: 1px solid {BORDER};"
                              " border-radius: 12px; }")
         row = QHBoxLayout(holder)
@@ -288,6 +289,12 @@ class SegmentedTabs(QWidget):
         outer.addStretch(1)
         outer.addWidget(holder)
         outer.addStretch(1)
+
+
+    def refresh_theme(self) -> None:
+        """생성 때 한 번만 바른 배경을 다시 바른다 (QSS 로 덮이지 않는다)."""
+        self._holder.setStyleSheet(f"QFrame {{ background: {CARD_BG}; border: 1px solid {BORDER};"
+                             " border-radius: 12px; }")
 
     def set_index(self, index: int) -> None:
         button = self.group.button(index)

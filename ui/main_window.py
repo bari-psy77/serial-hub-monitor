@@ -14,7 +14,8 @@ import time
 from PySide6 import QtCore
 from PySide6.QtCore import QByteArray, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QDialog, QFileDialog, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
+from PySide6.QtWidgets import (QApplication, QDialog, QFileDialog, QHBoxLayout, QLabel,
+                               QMainWindow, QMessageBox,
                                QPushButton, QSplitter, QTabWidget, QVBoxLayout,
                                QWidget)
 
@@ -22,6 +23,8 @@ from ..core import config as config_mod
 from ..core.bridge import BridgeServer
 from ..core.config import Profile
 from ..core.diag import diag
+from ..core import ansi as ansi_mod
+from ..core import filters as filters_mod
 from ..core.filters import TriggerWatcher
 from ..core.logstore import MARKER_PORT, render_line
 from ..core.filters import FilterRule
@@ -876,7 +879,44 @@ class MainWindow(QMainWindow):
     def _all_panes(self) -> list[ConsolePane]:
         panes = [*self.panes.values(), self.merged_pane]
         panes += [view.pane for view in self.filter_views]
+        panes += [dock.viewer.pane for dock in self.viewer_docks]
         return panes
+
+    def apply_theme_change(self, name: str) -> None:
+        """테마 전환 — QSS 재적용만으로 덮이지 않는 것들을 순서대로 되바른다.
+
+        전환은 pane 하나당 0.2초 안팎이 든다(재하이라이트). 드물게 하는 명시적
+        조작이라 감수하되, 도는 동안 대기 커서를 띄운다.
+        """
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            applied = theme.set_theme(name)
+            ansi_mod.set_theme(applied)         # 로그 본문의 펌웨어 색
+            filters_mod.set_theme(applied)      # 하이라이트·검색 색
+            app = QApplication.instance()
+            if app is not None:
+                theme.apply_theme(app)
+            # 카드 대부분은 QSS(objectName=card)로 칠해져 재적용에 딸려온다 —
+            # 인라인으로 바르는 위젯만 다시 바르면 된다
+            for widget in self.findChildren(theme.SegmentedTabs):
+                widget.refresh_theme()
+            if self.settings_dialog is not None:
+                self.settings_dialog.refresh_theme()
+            for pane in self._all_panes():
+                pane.refresh_theme()
+                # ★QSS repolish 가 setFont() 를 되돌린다 — Ctrl+휠로 키워 둔 크기가
+                #   전환 한 번에 사라지지 않게 프로파일 값으로 다시 건다
+                pane.set_font_size(self.profile.console_font_size)
+                pane.set_word_wrap(self.profile.word_wrap)
+            for dock in self.terminal_docks:
+                dock.refresh_theme()
+                if dock.pane is not None:
+                    dock.pane.set_font_size(self.profile.terminal_font_size)
+            config_mod.set_theme_setting(applied)
+            diag.info("app", f"테마 전환 -> {applied}")
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.tick()
 
     def change_terminal_font(self, delta: int) -> None:
         """터미널 글자 크기 — 터미널끼리 공통. 격자 계산이 폰트에 묶여 있어 콘솔과 분리한다."""
