@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QHBoxLayout, QLabel, QPlain
 from ..core.filters import SEARCH_HIGHLIGHT_COLOR, HighlightRule, compile_pattern
 from ..core.logstore import (TS_ABSOLUTE, TS_MODES, TS_OFF, TS_RELATIVE, LogStore,
                              render_line, render_prefix_len)
+from ..core import ansi
 from . import theme
 from ..core.i18n import tr
 
@@ -36,6 +37,10 @@ SEARCH_DEBOUNCE_MS = 250
 SEARCH_RESCAN_MIN_S = 0.5
 _TX_LINE_RE = r"(?:^|(?<=\] ))>>> .*$"
 _BANNER_LINE_RE = r"(?:^|(?<=\] ))!!.*$"
+
+
+# (토큰, 배경여부, 테마) -> QColor. 테마가 바뀌면 키가 달라져 자연히 갈린다
+_SPAN_COLOR_CACHE: dict = {}
 
 
 class AnsiBlockData(QTextBlockUserData):
@@ -78,6 +83,21 @@ class LineHighlighter(QSyntaxHighlighter):
         self._rules = compiled
         self.rehighlight()
 
+    @staticmethod
+    def span_color(token: str, background: bool):
+        """span 토큰 -> QColor. 캐시해 두면 hex 문자열을 매번 파싱하지 않는다 (8배 빠름)."""
+        if not token:
+            return None
+        key = (token, background, ansi._CURRENT)
+        color = _SPAN_COLOR_CACHE.get(key)
+        if color is None:
+            hex_value = ansi.resolve(token, background=background)
+            if not hex_value:
+                return None
+            color = QColor(hex_value)
+            _SPAN_COLOR_CACHE[key] = color
+        return color
+
     def highlightBlock(self, text: str) -> None:  # noqa: N802 - Qt 시그니처
         # 펌웨어 색을 먼저 깔고, 사용자 룰을 그 위에 덮는다 (룰이 우선)
         data = self.currentBlockUserData()
@@ -86,10 +106,12 @@ class LineHighlighter(QSyntaxHighlighter):
                 if end <= start or start >= len(text):
                     continue
                 fmt = QTextCharFormat()
-                if fg:
-                    fmt.setForeground(QColor(fg))
-                if bg:
-                    fmt.setBackground(QColor(bg))
+                fg_color = self.span_color(fg, False)
+                bg_color = self.span_color(bg, True)
+                if fg_color is not None:
+                    fmt.setForeground(fg_color)
+                if bg_color is not None:
+                    fmt.setBackground(bg_color)
                 if bold:
                     fmt.setFontWeight(700)
                 self.setFormat(start, min(end, len(text)) - start, fmt)

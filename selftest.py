@@ -345,6 +345,34 @@ def test_review_regressions(tmp: str) -> None:
     check("색이 없으면 span 도 없다", ansi_mod.parse("plain") == ("plain", ()))
     check("256색 SGR 파싱", ansi_mod.parse("\x1b[38;5;196mX\x1b[0m")[1][0][2].startswith("#"))
 
+    # 색을 저장하지 않는다 — 토큰만 담고 팔레트는 그릴 때 본다 (테마 전환용 계약)
+    check("표준색은 SGR 코드 토큰으로 담긴다",
+          ansi_mod.parse("\x1b[32mGREEN\x1b[0m")[1][0][2] == "32",
+          str(ansi_mod.parse("\x1b[32mGREEN\x1b[0m")[1][0]))
+    check("트루컬러는 리터럴 hex 로 담긴다",
+          ansi_mod.parse("\x1b[38;2;10;20;30mX\x1b[0m")[1][0][2] == "#0A141E",
+          str(ansi_mod.parse("\x1b[38;2;10;20;30mX\x1b[0m")[1][0]))
+    check("xterm256 의 표준 16색은 코드로 환산된다 (테마를 따라가야 하므로)",
+          ansi_mod.parse("\x1b[38;5;2mX\x1b[0m")[1][0][2] == "32",
+          str(ansi_mod.parse("\x1b[38;5;2mX\x1b[0m")[1][0]))
+    check("xterm256 컬러큐브는 리터럴",
+          ansi_mod.parse("\x1b[38;5;196mX\x1b[0m")[1][0][2].startswith("#"))
+
+    light_green = ansi_mod.resolve("32")
+    ansi_mod.set_theme("dark")
+    check("테마를 바꾸면 같은 토큰이 다른 색이 된다",
+          ansi_mod.resolve("32") != light_green and ansi_mod.resolve("32").startswith("#"),
+          f"{light_green} -> {ansi_mod.resolve('32')}")
+    check("배경 토큰도 테마를 따른다",
+          ansi_mod.resolve("41", background=True).startswith("#"))
+    check("리터럴은 테마와 무관하게 그대로", ansi_mod.resolve("#0A141E") == "#0A141E")
+    check("기본색 토큰은 빈 문자열", ansi_mod.resolve("") == "")
+    check("두 팔레트의 코드 집합이 같다",
+          set(ansi_mod.PALETTES["light"]["fg"]) == set(ansi_mod.PALETTES["dark"]["fg"])
+          and set(ansi_mod.PALETTES["light"]["bg"]) == set(ansi_mod.PALETTES["dark"]["bg"]))
+    ansi_mod.set_theme("없는테마")
+    check("모르는 테마는 light 폴백", ansi_mod.resolve("32") == light_green)
+
     store_ansi = LogStore()
     line = store_ansi.append("MLOG", "\x1b[33mWARN\x1b[0m tail")
     check("적재 시 본문에 이스케이프가 없다", "\x1b" not in line.text and line.text == "WARN tail")

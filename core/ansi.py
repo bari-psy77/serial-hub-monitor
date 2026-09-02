@@ -19,25 +19,64 @@ OTHER_ESC_RE = re.compile(r"\x1b\[[0-9;:<=>?]*[ -/]*[@-ln-~]"
 TRUNC_ESC_RE = re.compile(r"\x1b\[?[0-9;:<=>?]*$")
 
 # 흰 배경에서 읽히도록 조정한 8색 + 밝은 8색 (터미널 기본값을 그대로 쓰면 노랑이 안 보인다)
-_FG = {
-    30: "#3B4045", 31: "#C0392B", 32: "#1E8449", 33: "#B7791F",
-    34: "#1F5FA9", 35: "#8E44AD", 36: "#0E7490", 37: "#5B6770",
-    90: "#6B7280", 91: "#E74C3C", 92: "#27AE60", 93: "#D68910",
-    94: "#3498DB", 95: "#A569BD", 96: "#17A2B8", 97: "#2C3034",
+PALETTES = {
+    # 밝은 배경 기준 (지금까지의 값)
+    "light": {
+        "fg": {30: "#3B4045", 31: "#C0392B", 32: "#1E8449", 33: "#B7791F",
+               34: "#1F5FA9", 35: "#8E44AD", 36: "#0E7490", 37: "#5B6770",
+               90: "#6B7280", 91: "#E74C3C", 92: "#27AE60", 93: "#D68910",
+               94: "#3498DB", 95: "#A569BD", 96: "#17A2B8", 97: "#2C3034"},
+        "bg": {40: "#3B4045", 41: "#FADBD8", 42: "#D5F5E3", 43: "#FCF3CF",
+               44: "#D6EAF8", 45: "#EBDEF0", 46: "#D1F2F6", 47: "#EEF1F4",
+               100: "#D5D8DC", 101: "#FADBD8", 102: "#D5F5E3", 103: "#FCF3CF",
+               104: "#D6EAF8", 105: "#EBDEF0", 106: "#D1F2F6", 107: "#F8F9F9"},
+    },
+    # 어두운 배경 기준 (VS Code 다크 계열) — 밝은 배경용 값을 그대로 쓰면 안 보인다
+    "dark": {
+        "fg": {30: "#7F8C8D", 31: "#F14C4C", 32: "#23D18B", 33: "#F5F543",
+               34: "#3B8EEA", 35: "#D670D6", 36: "#29B8DB", 37: "#D4D4D4",
+               90: "#808080", 91: "#FF6E6E", 92: "#4FE59F", 93: "#FFF97A",
+               94: "#6BB6FF", 95: "#E58FE5", 96: "#5BD6F0", 97: "#FFFFFF"},
+        "bg": {40: "#3B4045", 41: "#5A2727", 42: "#1E4620", 43: "#5A4A16",
+               44: "#1F3A5F", 45: "#4A2352", 46: "#12484F", 47: "#3A3F44",
+               100: "#4B5157", 101: "#6E3030", 102: "#265A2A", 103: "#6E5A1B",
+               104: "#264A78", 105: "#5C2C66", 106: "#175C64", 107: "#4A5056"},
+    },
 }
-_BG = {
-    40: "#3B4045", 41: "#FADBD8", 42: "#D5F5E3", 43: "#FCF3CF",
-    44: "#D6EAF8", 45: "#EBDEF0", 46: "#D1F2F6", 47: "#EEF1F4",
-    100: "#D5D8DC", 101: "#FADBD8", 102: "#D5F5E3", 103: "#FCF3CF",
-    104: "#D6EAF8", 105: "#EBDEF0", 106: "#D1F2F6", 107: "#F8F9F9",
-}
+_CURRENT = "light"
+_FG_CODES = frozenset(PALETTES["light"]["fg"])
+_BG_CODES = frozenset(PALETTES["light"]["bg"])
 
 
-def _xterm256(index: int) -> str:
-    """256색 팔레트 → hex."""
+def set_theme(name: str) -> None:
+    """팔레트를 갈아끼운다. 이미 받은 로그도 다음에 그릴 때 새 색으로 나온다."""
+    global _CURRENT
+    _CURRENT = name if name in PALETTES else "light"
+
+
+def resolve(token: str, *, background: bool = False) -> str:
+    """span 토큰 -> hex.
+
+    `""` 는 기본색, `"#RRGGBB"` 는 리터럴(트루컬러·컬러큐브)이라 테마와 무관하고,
+    숫자 문자열은 SGR 코드라 현재 팔레트에서 찾는다.
+    """
+    if not token:
+        return ""
+    if token.startswith("#"):
+        return token
+    table = PALETTES[_CURRENT]["bg" if background else "fg"]
+    try:
+        return table.get(int(token), "")
+    except ValueError:
+        return ""
+
+
+def _xterm256(index: int, *, background: bool = False) -> str:
+    """256색 → 토큰. 0..15 는 표준 16색이라 **코드**로, 그 위는 절대색이라 리터럴로."""
+    if index < 8:
+        return str((40 if background else 30) + index)
     if index < 16:
-        table = list(_FG.values())[:8] + list(_FG.values())[8:16]
-        return table[index] if index < len(table) else "#000000"
+        return str((100 if background else 90) + index - 8)
     if index < 232:
         index -= 16
         levels = (0, 95, 135, 175, 215, 255)
@@ -62,14 +101,14 @@ def _apply_params(params: list[int], state: tuple[str, str, bool]) -> tuple[str,
             fg = ""
         elif code == 49:
             bg = ""
-        elif code in _FG:
-            fg = _FG[code]
-        elif code in _BG:
-            bg = _BG[code]
+        elif code in _FG_CODES:
+            fg = str(code)               # 색이 아니라 **코드**를 담는다 (테마 전환용)
+        elif code in _BG_CODES:
+            bg = str(code)
         elif code in (38, 48):
             target_fg = code == 38
             if index + 1 < len(params) and params[index + 1] == 5 and index + 2 < len(params):
-                color = _xterm256(params[index + 2])
+                color = _xterm256(params[index + 2], background=not target_fg)
                 index += 2
             elif index + 1 < len(params) and params[index + 1] == 2 and index + 4 < len(params):
                 color = "#{:02X}{:02X}{:02X}".format(*(min(255, max(0, v))
