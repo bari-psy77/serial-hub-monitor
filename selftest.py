@@ -1244,7 +1244,7 @@ def test_gui(tmp: str) -> None:
     print("\n== GUI (offscreen) ==")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QComboBox
 
     from .core import ansi as ansi_mod
     from .core import filters as filters_mod
@@ -1376,6 +1376,15 @@ def test_gui(tmp: str) -> None:
           ansi_mod.resolve("32"))
     check("하이라이트 색도 다크로 바뀐다",
           filters_mod.highlight_hex("빨강") == filters_mod.HIGHLIGHT_PALETTES["dark"]["빨강"])
+    rules_combo = None
+    for child in window.settings().rules_page.findChildren(QComboBox):
+        if child.currentData() in filters_mod.highlight_names():
+            rules_combo = child
+            break
+    check("규칙 페이지의 색 미리보기도 다크를 따른다 (실사용 신고)",
+          rules_combo is not None
+          and filters_mod.highlight_hex(rules_combo.currentData()) in rules_combo.styleSheet(),
+          rules_combo.styleSheet()[:60] if rules_combo else "(콤보 없음)")
     check("설정에 저장된다 (종료 후 다시 켜도 다크)", config_mod.theme() == "dark",
           config_mod.theme())
     check("전환 후에도 tick 이 예외 없이 돈다", window.tick() is None)
@@ -1394,11 +1403,14 @@ def test_gui(tmp: str) -> None:
     check("콤보의 itemData 는 저장 키다 (표시명이 아니라)",
           [general.theme_combo.itemData(i) for i in range(2)] == ["light", "dark"],
           str([general.theme_combo.itemData(i) for i in range(2)]))
-    general.theme_combo.setCurrentIndex(1)
+    # 앞선 검사에서 테마가 어느 쪽이든 상관없게 — 콤보는 현재 설정으로 만들어진다
+    general.theme_combo.setCurrentIndex(general.theme_combo.findData("light"))
+    pump(app)
+    general.theme_combo.setCurrentIndex(general.theme_combo.findData("dark"))
     pump(app)
     check("콤보를 바꾸면 즉시 적용된다 (언어와 달리 재시작 불필요)",
           theme_mod.CURRENT == "dark", theme_mod.CURRENT)
-    general.theme_combo.setCurrentIndex(0)
+    general.theme_combo.setCurrentIndex(general.theme_combo.findData("light"))
     pump(app)
     check("되돌리면 라이트", theme_mod.CURRENT == "light")
 
@@ -1435,6 +1447,13 @@ def test_gui(tmp: str) -> None:
     _wheel_on(mlog_pane.view, -120, Qt.KeyboardModifier.ControlModifier)
     check("Ctrl+휠 아래로 = 글자 작아진다", profile.console_font_size == before,
           str(profile.console_font_size))
+    before_bar = profile.console_font_size
+    _wheel_on(mlog_pane.view.verticalScrollBar(), 120, Qt.KeyboardModifier.ControlModifier)
+    check("스크롤바 위에서도 Ctrl+휠이 먹는다 (실사용 신고 — 안 먹던 자리)",
+          profile.console_font_size == before_bar + 1,
+          f"{before_bar} -> {profile.console_font_size}")
+    _wheel_on(mlog_pane.view.verticalScrollBar(), -120, Qt.KeyboardModifier.ControlModifier)
+
     _wheel_on(mlog_pane.view, 120, Qt.KeyboardModifier.NoModifier)
     check("Ctrl 없이는 폰트가 안 바뀐다 (평소 스크롤)",
           profile.console_font_size == before, str(profile.console_font_size))
@@ -1928,6 +1947,23 @@ def test_theme() -> None:
               str(set(theme_mod.PALETTES["light"]) ^ set(theme_mod.PALETTES["dark"])))
         check("배너 색도 토큰으로 있다 (콘솔이 하드코딩하던 것)",
               "BANNER_BG" in theme_mod.PALETTES["light"])
+        # ★QSS 에 밝은 색을 박아두면 다크에서 글씨가 안 보인다 (실사용 신고)
+        theme_mod.set_theme("dark")
+        dark_qss = theme_mod.build_qss()
+        leftovers = [c for c in ("#F7F8F9", "#F2F4F6", "#B0B8C1", "#C6D6F5",
+                                 "#E8F0FE", "#CFE3FF")
+                     if c in dark_qss]
+        check("다크 QSS 에 밝은 색이 박혀 있지 않다", not leftovers, str(leftovers))
+        check("선택 색이 테마를 따른다",
+              theme_mod.PALETTES["light"]["SELECTION_BG"]
+              != theme_mod.PALETTES["dark"]["SELECTION_BG"])
+        check("버튼 포커스 테두리 규칙이 있다 (포커스가 가면 안 보이던 문제)",
+              "QPushButton:focus" in dark_qss)
+        check("상태 필 배경도 테마를 따른다",
+              theme_mod.pill_tint(theme_mod.SUCCESS)
+              != theme_mod.PALETTES["light"]["TINT_SUCCESS"],
+              theme_mod.pill_tint(theme_mod.SUCCESS))
+
         theme_mod.set_theme("없는테마")
         check("모르는 이름은 light 폴백",
               theme_mod.CURRENT == "light" and theme_mod.BG == light_bg)

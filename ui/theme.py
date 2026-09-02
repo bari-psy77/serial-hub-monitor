@@ -5,6 +5,8 @@ UI 문서 §0 참조. 색은 여기 한 곳에서만 관리한다.
 
 from __future__ import annotations
 
+import sys
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton,
                                QSizePolicy, QVBoxLayout, QWidget)
@@ -18,6 +20,11 @@ PALETTES = {
         "SUCCESS": "#00C471", "DANGER": "#F04452", "WARNING": "#FFB331",
         "CONSOLE_BG": "#FFFFFF", "CONSOLE_TEXT": "#191F28", "TX_TEXT": "#4E5968",
         "BANNER_BG": "#FFF4C2", "BANNER_TEXT": "#8A6D00",
+        "HOVER_BG": "#F7F8F9", "DISABLED_BG": "#F2F4F6", "DISABLED_TEXT": "#B0B8C1",
+        "SOFT_BG": "#E8F0FE", "SOFT_BORDER": "#C6D6F5",
+        "SELECTION_BG": "#CFE3FF", "SELECTION_TEXT": "#191F28",
+        "TINT_SUCCESS": "#E7F9F1", "TINT_WARNING": "#FFF6E5",
+        "TINT_DANGER": "#FEECEE", "TINT_PRIMARY": "#E8F0FE", "TINT_NEUTRAL": "#F2F4F6",
     },
     # 어두운 화면 — 콘솔 본문까지 함께 바뀐다
     "dark": {
@@ -27,6 +34,11 @@ PALETTES = {
         "SUCCESS": "#23D18B", "DANGER": "#F14C4C", "WARNING": "#F5C451",
         "CONSOLE_BG": "#14171C", "CONSOLE_TEXT": "#DCE1E8", "TX_TEXT": "#9AA4B2",
         "BANNER_BG": "#5C5326", "BANNER_TEXT": "#FFE9A3",
+        "HOVER_BG": "#272B33", "DISABLED_BG": "#212429", "DISABLED_TEXT": "#5C6470",
+        "SOFT_BG": "#22375C", "SOFT_BORDER": "#33507F",
+        "SELECTION_BG": "#2C5480", "SELECTION_TEXT": "#FFFFFF",
+        "TINT_SUCCESS": "#17372A", "TINT_WARNING": "#3B3115",
+        "TINT_DANGER": "#3E1F22", "TINT_PRIMARY": "#22375C", "TINT_NEUTRAL": "#272B33",
     },
 }
 CURRENT = "light"
@@ -48,6 +60,18 @@ CONSOLE_TEXT = PALETTES["light"]["CONSOLE_TEXT"]
 TX_TEXT = PALETTES["light"]["TX_TEXT"]
 BANNER_BG = PALETTES["light"]["BANNER_BG"]
 BANNER_TEXT = PALETTES["light"]["BANNER_TEXT"]
+HOVER_BG = PALETTES["light"]["HOVER_BG"]
+DISABLED_BG = PALETTES["light"]["DISABLED_BG"]
+DISABLED_TEXT = PALETTES["light"]["DISABLED_TEXT"]
+SOFT_BG = PALETTES["light"]["SOFT_BG"]
+SOFT_BORDER = PALETTES["light"]["SOFT_BORDER"]
+SELECTION_BG = PALETTES["light"]["SELECTION_BG"]
+SELECTION_TEXT = PALETTES["light"]["SELECTION_TEXT"]
+TINT_SUCCESS = PALETTES["light"]["TINT_SUCCESS"]
+TINT_WARNING = PALETTES["light"]["TINT_WARNING"]
+TINT_DANGER = PALETTES["light"]["TINT_DANGER"]
+TINT_PRIMARY = PALETTES["light"]["TINT_PRIMARY"]
+TINT_NEUTRAL = PALETTES["light"]["TINT_NEUTRAL"]
 
 UI_FONT = '"Pretendard", "Malgun Gothic", "Segoe UI", sans-serif'
 MONO_FONT = '"Cascadia Mono", "Consolas", "D2Coding", monospace'
@@ -90,20 +114,22 @@ QPushButton {{
     border-radius: 8px;
     padding: 6px 14px;
 }}
-QPushButton:hover {{ background: #F7F8F9; }}
-QPushButton:disabled {{ background: #F2F4F6; color: #B0B8C1; }}
+QPushButton:hover {{ background: {HOVER_BG}; }}
+/* 포커스가 가면 버튼이 사라져 보이던 문제 — 테두리를 강조색으로 */
+QPushButton:focus {{ border: 1px solid {PRIMARY}; }}
+QPushButton:disabled {{ background: {DISABLED_BG}; color: {DISABLED_TEXT}; }}
 QPushButton#primary {{
     background: {PRIMARY}; color: #FFFFFF; border: none; font-weight: 700;
     padding: 9px 18px;
 }}
 QPushButton#primary:hover {{ background: {PRIMARY_DARK}; }}
-QPushButton#primary:disabled {{ background: #C6D6F5; color: #FFFFFF; }}
+QPushButton#primary:disabled {{ background: {SOFT_BORDER}; color: {CARD_BG}; }}
 QPushButton#danger {{ background: {DANGER}; color: #FFFFFF; border: none; font-weight: 700; }}
 QPushButton#toolToggle {{
     padding: 3px 9px; border-radius: 7px; color: {TEXT_SUB};
 }}
 QPushButton#toolToggle:checked {{
-    background: #E8F0FE; color: {PRIMARY}; border-color: #C6D6F5; font-weight: 700;
+    background: {SOFT_BG}; color: {PRIMARY}; border-color: {SOFT_BORDER}; font-weight: 700;
 }}
 QPushButton#segment {{
     border: none; background: transparent; color: {TEXT_SUB};
@@ -116,7 +142,7 @@ QLineEdit, QComboBox, QSpinBox {{
     border-radius: 8px; padding: 6px 10px;
 }}
 QLineEdit:focus, QComboBox:focus {{ border-color: {PRIMARY}; }}
-QLineEdit:disabled {{ background: #F2F4F6; color: #B0B8C1; }}
+QLineEdit:disabled {{ background: {DISABLED_BG}; color: {DISABLED_TEXT}; }}
 QComboBox::drop-down {{ border: none; width: 18px; }}
 /* 이름 버튼 — 값을 고르는 칸이므로 입력칸과 같은 모양으로 보인다.
    메뉴 표시는 텍스트 끝의 ▾ 하나로 충분하다 (Qt 기본 인디케이터는 모서리에 겹쳐 찍힌다). */
@@ -128,8 +154,8 @@ QToolButton#fieldButton:hover {{ border-color: {PRIMARY}; }}
 QToolButton#fieldButton::menu-indicator {{ image: none; width: 0; }}
 
 QComboBox QAbstractItemView {{
-    background: {CARD_BG}; border: 1px solid {BORDER}; selection-background-color: #E8F0FE;
-    selection-color: {TEXT};
+    background: {CARD_BG}; border: 1px solid {BORDER};
+    selection-background-color: {SELECTION_BG}; selection-color: {SELECTION_TEXT};
 }}
 
 /* 폰트는 QSS 로 지정하지 않는다 — QSS 폰트 룰이 있으면 repolish(레이아웃 전환 등)
@@ -137,7 +163,7 @@ QComboBox QAbstractItemView {{
 QPlainTextEdit, QTextEdit {{
     background: {CONSOLE_BG}; color: {CONSOLE_TEXT};
     border: 1px solid {BORDER}; border-radius: 10px;
-    selection-background-color: #CFE3FF; selection-color: {TEXT};
+    selection-background-color: {SELECTION_BG}; selection-color: {SELECTION_TEXT};
 }}
 
 QTableWidget {{
@@ -148,7 +174,7 @@ QHeaderView::section {{
     background: {CARD_BG}; border: none; border-bottom: 1px solid {BORDER};
     padding: 6px; color: {TEXT_SUB}; font-weight: 700;
 }}
-QTableWidget::item:selected {{ background: #E8F0FE; color: {TEXT}; }}
+QTableWidget::item:selected {{ background: {SELECTION_BG}; color: {SELECTION_TEXT}; }}
 
 QSplitter::handle {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
@@ -162,9 +188,29 @@ QMenuBar {{ background: {BG}; }}
 QMenuBar::item:selected {{ background: #E5E8EB; border-radius: 6px; }}
 QMenu {{ background: {CARD_BG}; border: 1px solid {BORDER}; border-radius: 8px; padding: 4px; }}
 QMenu::item {{ padding: 6px 22px; border-radius: 6px; }}
-QMenu::item:selected {{ background: #E8F0FE; }}
+QMenu::item:selected {{ background: {SELECTION_BG}; color: {SELECTION_TEXT}; }}
 QCheckBox {{ spacing: 6px; }}
 QToolTip {{ background: {TEXT}; color: #FFFFFF; border: none; padding: 6px 8px; }}"""
+
+
+def apply_titlebar(widget) -> None:
+    """창 제목표시줄도 테마를 따라간다 (Windows 11).
+
+    Qt 는 제목표시줄을 그리지 않는다 — OS 가 그린다. DWM 속성으로 다크를 알려주지 않으면
+    본문만 어둡고 위쪽만 하얗게 남는다 (실사용 신고).
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        hwnd = int(widget.winId())
+        value = ctypes.c_int(1 if CURRENT == "dark" else 0)
+        # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE (구버전 빌드는 19)
+        for attribute in (20, 19):
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value))
+    except Exception:  # noqa: BLE001 - 장식이 안 바뀔 뿐, 앱은 계속 돈다
+        pass
 
 
 def state_color(state: str) -> str:
@@ -242,18 +288,18 @@ class StatusPill(QLabel):
         label = text or STATE_LABELS.get(state, state)
         self.setText(f"● {label}")
         self.setStyleSheet(
-            f"QLabel {{ background: {_tint(color)}; color: {color}; "
+            f"QLabel {{ background: {pill_tint(color)}; color: {color}; "
             f"border-radius: 12px; padding: 4px 12px; font-weight: 700; }}")
 
 
-def _tint(hex_color: str) -> str:
-    """상태색의 옅은 배경 — 필 안쪽 채움용."""
+def pill_tint(hex_color: str) -> str:
+    """상태색의 옅은 배경 — 필 안쪽 채움. 다크에서는 어두운 톤을 쓴다."""
     return {
-        SUCCESS: "#E7F9F1",
-        WARNING: "#FFF6E5",
-        DANGER: "#FEECEE",
-        PRIMARY: "#E8F0FE",
-    }.get(hex_color, "#F2F4F6")
+        SUCCESS: TINT_SUCCESS,
+        WARNING: TINT_WARNING,
+        DANGER: TINT_DANGER,
+        PRIMARY: TINT_PRIMARY,
+    }.get(hex_color, TINT_NEUTRAL)
 
 
 class SegmentedTabs(QWidget):

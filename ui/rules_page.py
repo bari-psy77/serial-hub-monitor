@@ -215,6 +215,12 @@ class RulesPage(QWidget):
         self._paint_combo(combo)
         return combo
 
+    def refresh_theme(self) -> None:
+        """테마가 바뀌면 색 미리보기를 다시 칠한다 (팔레트가 통째로 달라진다)."""
+        for combo in self.findChildren(QComboBox):
+            if combo.currentData() in filters_mod.highlight_names():
+                self._paint_combo(combo)
+
     @staticmethod
     def _paint_combo(combo: QComboBox) -> None:
         # highlight_hex 가 모르는 이름을 기본색으로 폴백하므로 여기서 따로 처리하지 않는다

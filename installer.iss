@@ -47,7 +47,6 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
 ko.DesktopIcon=바탕 화면에 바로가기 만들기
-ko.RunSelfcheck=설치 상태 점검 실행 (권장)
 ko.LaunchApp={#AppName} 실행
 ko.KeepData=설정과 프로파일을 남겨 두겠습니까?%n%n[예] 를 누르면 다음에 다시 설치할 때 그대로 쓸 수 있습니다.%n(모든 사용자용으로 설치했다면 다른 계정의 설정은 지워지지 않습니다)
 ko.LogPageTitle=로그 저장 위치
@@ -57,7 +56,6 @@ en.LogPageTitle=Log location
 en.LogPageSubtitle=Where should captured serial logs be stored?
 en.LogPageDesc=Logs are saved in this folder when you press [⏺ Start log].%nPer-date (MMDD) subfolders and other options can be changed any time in Settings > Log.
 en.DesktopIcon=Create a desktop shortcut
-en.RunSelfcheck=Run installation check (recommended)
 en.LaunchApp=Launch {#AppName}
 en.KeepData=Keep your settings and profiles?%n%n[Yes] lets a future install reuse them.
 ; 시작 메뉴 항목 이름 — 앱 기본 언어가 영어인데 여기가 한국어로 굳어 있었다.
@@ -100,8 +98,6 @@ Type: filesandordirs; Name: "{app}\_internal"
 ;   설정이 실제 사용자가 아니라 관리자 계정의 %LOCALAPPDATA% 에 기록된다.
 Filename: "{app}\{#AppExe}"; Parameters: "--set-log-dir ""{code:GetLogDirArg}"""; \
     StatusMsg: "설정을 기록하는 중..."; Flags: runhidden waituntilterminated runasoriginaluser
-Filename: "{app}\{#AppExe}"; Parameters: "--selfcheck"; Description: "{cm:RunSelfcheck}"; \
-    Flags: postinstall skipifsilent nowait
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchApp}"; \
     Flags: postinstall skipifsilent nowait unchecked
 

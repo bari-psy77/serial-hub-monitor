@@ -97,6 +97,7 @@ class MainWindow(QMainWindow):
         if self.profile.bridge_port:
             self.bridge.start()  # 실패해도 앱은 산다 — 칩 툴팁에 사유 표시
 
+        theme.apply_titlebar(self)     # 제목표시줄도 테마를 따라간다
         self.apply_rules()
         self._sync_active_ports()
         self._restore_geometry()
@@ -913,6 +914,13 @@ class MainWindow(QMainWindow):
                 dock.refresh_theme()
                 if dock.pane is not None:
                     dock.pane.set_font_size(self.profile.terminal_font_size)
+            theme.apply_titlebar(self)
+            for window in self.findChildren(QDialog):
+                theme.apply_titlebar(window)
+            for dock in [*self.viewer_docks, *self.terminal_docks,
+                         *self.filter_views]:
+                if dock.isFloating():
+                    theme.apply_titlebar(dock)
             config_mod.set_theme_setting(applied)
             diag.info("app", f"테마 전환 -> {applied}")
         finally:

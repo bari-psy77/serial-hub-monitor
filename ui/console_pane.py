@@ -379,6 +379,9 @@ class ConsolePane(QWidget):
         # 검색창의 returnPressed(= 다음 매치)가 아예 발생하지 않는다. 콘솔 본문에
         # 이벤트 필터를 걸어, 본문에 포커스가 있을 때만 스크롤 잠금을 푼다.
         self.view.installEventFilter(self)
+        # 스크롤바가 휠을 먼저 먹어 Ctrl+휠 확대가 그 위에서만 안 먹었다 (실사용 신고)
+        self.view.verticalScrollBar().installEventFilter(self)
+        self.view.horizontalScrollBar().installEventFilter(self)
         escape = QShortcut(QKeySequence("Esc"), self.search, activated=self.close_search)
         escape.setContext(Qt.WidgetWithChildrenShortcut)
 
@@ -450,8 +453,9 @@ class ConsolePane(QWidget):
     def eventFilter(self, obj, event) -> bool:  # noqa: N802 - Qt 시그니처
         # ★휠은 본문(QPlainTextEdit)이 먼저 받는다 — pane 의 wheelEvent 까지
         #   올라오지 않으므로 여기서 Ctrl+휠을 가로챈다
-        if obj is self.view and event.type() == QEvent.Wheel \
-                and event.modifiers() & Qt.ControlModifier:
+        if event.type() == QEvent.Wheel and event.modifiers() & Qt.ControlModifier \
+                and obj in (self.view, self.view.verticalScrollBar(),
+                            self.view.horizontalScrollBar()):
             steps = event.angleDelta().y()
             if steps:
                 self.zoom_requested.emit(1 if steps > 0 else -1)
