@@ -10,7 +10,7 @@ a PowerShell terminal inside the same window.
 
 ## Installation (recommended)
 
-Download `SerialHub_Setup_1.4.0.exe` from the [releases page](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) and run it to
+Download `SerialHub_Setup_1.5.0.exe` from the [releases page](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) and run it to
 start the setup wizard (only the latest build is kept there). No Python required,
 and **no administrator rights required** (per-user install is the default).
 
@@ -28,7 +28,7 @@ extra icons → summary → install → finish (with optional install check and 
 Unattended deployment:
 
 ```
-SerialHub_Setup_1.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
+SerialHub_Setup_1.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
 unins000.exe /VERYSILENT /SUPPRESSMSGBOXES          # uninstall (settings are kept)
 ```
 
@@ -128,7 +128,7 @@ buttons on the second row and the settings modal.
 
 | Area | Contents |
 |---|---|
-| Main | Status pills + split consoles (1 left + 2 right by default) + command panel |
+| Main | Status pills (each with a 🔌 connect toggle) + split consoles (1 left + 2 right by default) + command panel |
 | Action bar | 🔌 Connect · ⚙ Settings · 🎨 Rules · 📁 Log · 💾 Profile · 🔎 Filtered view · ❓ Help |
 | Settings (modal) | Connection / Rules / Log / Profile — navigate via the list on the left |
 
@@ -144,7 +144,7 @@ Pages in the settings dialog:
 
 Main shortcuts: `Ctrl+F` search, `F3`/`Shift+F3` next/previous match, `Ctrl+K` new
 filtered view, `Ctrl+1/2/3` focus console, `` Ctrl+` `` command input, `Ctrl+Tab`
-cycle target port, `Ctrl+T` timestamp mode, `Ctrl+Space` (or `Enter`) release
+cycle target port, `Ctrl+T` timestamp mode, **`Ctrl`+mouse wheel** text size, `Ctrl+Space` (or `Enter`) release
 scroll lock, `Ctrl+L` clear view, `Ctrl+S` save profile, `F1` user guide.
 
 ## Console count — models with 1 or 2 UARTs

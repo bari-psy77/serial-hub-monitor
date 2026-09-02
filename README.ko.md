@@ -9,7 +9,7 @@ VS Code Serial Monitor + Tera Term + MobaXterm 세 툴을 하나로 대체한다
 
 ## 설치 (권장)
 
-[릴리스 페이지](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) 에서 `SerialHub_Setup_1.4.0.exe` 를 받아 실행하면 설치
+[릴리스 페이지](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) 에서 `SerialHub_Setup_1.5.0.exe` 를 받아 실행하면 설치
 마법사가 뜬다 (항상 최신 버전 하나만 올려 둔다). Python 을 깔
 필요가 없고, **관리자 권한도 필요 없다**(기본이 사용자 단위 설치).
 
@@ -25,7 +25,7 @@ VS Code Serial Monitor + Tera Term + MobaXterm 세 툴을 하나로 대체한다
 무인 배포:
 
 ```
-SerialHub_Setup_1.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
+SerialHub_Setup_1.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
 unins000.exe /VERYSILENT /SUPPRESSMSGBOXES          # 제거 (설정은 보존)
 ```
 
@@ -115,7 +115,7 @@ python app.py --demo          # 포트 없이 화면만 확인 (합성 로그)
 
 | 위치 | 내용 |
 |---|---|
-| 메인 | 상태 필 + 분할 콘솔(좌1+우2 기본) + 명령 패널 |
+| 메인 | 상태 필(+ 🔌 연결 토글 버튼) + 분할 콘솔(좌1+우2 기본) + 명령 패널 |
 | 액션 바 | 🔌 연결 · ⚙ 설정 · 🎨 규칙 · 📁 로그 · 💾 프로파일 · 🔎 필터드뷰 · ❓ 도움말 |
 | 설정 (모달) | 연결 / 규칙 / 로그 설정 / 프로파일 — 왼쪽 목록으로 이동 |
 
@@ -131,7 +131,7 @@ python app.py --demo          # 포트 없이 화면만 확인 (합성 로그)
 
 주요 단축키: `Ctrl+F` 검색, `F3`/`Shift+F3` 매치 이동, `Ctrl+K` 새 필터드뷰,
 `Ctrl+1/2/3` 콘솔 포커스, `` Ctrl+` `` 명령 입력, `Ctrl+Tab` 대상 포트 전환,
-`Ctrl+T` 타임스탬프 모드, `Ctrl+Space`(또는 `Enter`) 스크롤 정지 해제,
+`Ctrl+T` 타임스탬프 모드, **`Ctrl`+마우스 휠** 글자 크기, `Ctrl+Space`(또는 `Enter`) 스크롤 정지 해제,
 `Ctrl+L` 화면 지우기, `Ctrl+S` 프로파일 저장, `F1` 사용 설명서.
 
 ## 콘솔 수 — UART 가 1개·2개인 모델

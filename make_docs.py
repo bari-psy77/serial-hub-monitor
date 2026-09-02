@@ -646,6 +646,8 @@ are kept</td></tr>
 <li><b>소급 채움</b> — 이미 받은 라인 중 매치되는 것도 채워준다</li>
 <li><b>파일로 저장</b> — 지금 보이는 결과만 텍스트로 (티켓 첨부용)</li>
 <li>자주 쓰는 필터는 [설정 → 규칙 → 저장된 필터] 에 두고 원클릭으로 재생성</li>
+<li><b>화면 아래에 도킹</b>되어 열린다 — 제목줄을 끌어 좌/우로 옮기거나 떼어내 독립 창으로
+쓸 수 있고, 툴바의 <b>⛶</b> 로 최대화한다</li>
 </ul>""",
             "Filtered views — see only what you need", f"""
 {img('filterview', 'A filtered view — only the matching lines, in a separate window')}
@@ -660,6 +662,8 @@ case</li>
 attachments)</li>
 <li>Keep frequent filters under [Settings → Rules → Saved filters] and recreate them with
 one click</li>
+<li>Opens <b>docked at the bottom</b> — drag the title bar to move it to another edge or
+float it, and use <b>⛶</b> in the toolbar to maximize</li>
 </ul>""")
 
     section("로그 불러오기 — 지난 로그 분석", """
@@ -701,6 +705,7 @@ being recorded.</div>""")
 <li>마우스 휠·오른쪽 스크롤바로 지난 출력을 되짚어 본다 (<kbd>PageUp</kbd>/<kbd>PageDown</kbd>
 도 같은 일을 한다). 타이핑하거나 새 출력이 오면 자동으로 맨 아래로 돌아온다</li>
 <li><kbd>Tab</kbd> 자동완성이 그대로 동작한다 (<kbd>Shift</kbd>+<kbd>Tab</kbd> 은 역방향)</li>
+<li><kbd>Ctrl</kbd>+마우스 휠로 글자 크기를 키우고 줄인다 (터미널끼리 같은 크기)</li>
 <li><kbd>Ctrl</kbd>+<kbd>V</kbd> 붙여넣기, 우클릭 메뉴에서 화면 전체 복사·재시작</li>
 <li>여러 개를 열면 하단에서 <b>탭으로 묶인다</b> — 폭이 좁아지지 않는다. 제목줄을 끌어
 떼어내면 독립 창이 되고, 툴바의 <b>⛶</b> 로 최대화·복원한다 (도킹 중에 눌러도 바로 커진다).
@@ -723,6 +728,7 @@ programs run as-is. Drag the title bar to float it; several can be open at once.
 bottom</li>
 <li><kbd>Tab</kbd> completion works as usual (<kbd>Shift</kbd>+<kbd>Tab</kbd> cycles
 backwards)</li>
+<li><kbd>Ctrl</kbd>+mouse wheel resizes the text (shared across terminals)</li>
 <li><kbd>Ctrl</kbd>+<kbd>V</kbd> pastes; the right-click menu offers copy-whole-screen and
 restart</li>
 <li>Open several and they are <b>tabbed together</b> at the bottom instead of shrinking each
