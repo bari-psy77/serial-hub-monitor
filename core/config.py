@@ -126,6 +126,7 @@ class Profile:
     strip_ansi: bool = True     # 본문에서 색 코드 제거 (파일·grep 은 항상 깨끗하다)
     ansi_color: bool = True     # 펌웨어가 보낸 색을 화면에 살릴지
     console_font_size: int = 12
+    terminal_font_size: int = 10    # 터미널은 격자 렌더러라 콘솔과 따로 둔다
     word_wrap: bool = False
     highlight_rules: list[HighlightRule] = field(
         default_factory=lambda: [HighlightRule(**r.to_dict()) for r in DEFAULT_HIGHLIGHT_RULES])
@@ -203,6 +204,7 @@ class Profile:
             "strip_ansi": self.strip_ansi,
             "ansi_color": self.ansi_color,
             "console_font_size": self.console_font_size,
+            "terminal_font_size": self.terminal_font_size,
             "word_wrap": self.word_wrap,
             "highlight_rules": [r.to_dict() for r in self.highlight_rules],
             "redact_rules": [r.to_dict() for r in self.redact_rules],
@@ -241,6 +243,7 @@ class Profile:
         profile.strip_ansi = bool(data.get("strip_ansi", True))
         profile.ansi_color = bool(data.get("ansi_color", True))
         profile.console_font_size = max(7, min(28, int(data.get("console_font_size", 12))))
+        profile.terminal_font_size = max(6, min(24, int(data.get("terminal_font_size", 10))))
         profile.word_wrap = bool(data.get("word_wrap", False))
         if "highlight_rules" in data:
             profile.highlight_rules = [HighlightRule.from_dict(r)

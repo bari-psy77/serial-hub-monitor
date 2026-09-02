@@ -165,6 +165,9 @@ EN: dict[str, str] = {
     "{0} 연결": "{0} connection",
     "{0} 연결됨": "{0} connected",
     "{0} 해제됨": "{0} disconnected",
+    "{0} 연결 해제": "Disconnect {0}",
+    "{0} 해제됨 — 기록 중이라 이 포트 로그는 여기서 끊깁니다":
+        "{0} disconnected — recording is on, so this port's log stops here",
     "{0} 설정 없음": "no settings for {0}",
     "{0} 포트 미지정": "no COM port set for {0}",
     "{0} 열기 실패: {1}": "{0} failed to open: {1}",

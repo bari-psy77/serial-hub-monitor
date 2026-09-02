@@ -120,12 +120,23 @@ class MainWindow(QMainWindow):
         pill_row = QHBoxLayout()
         pill_row.setSpacing(8)
         self.pills: dict[str, theme.StatusPill] = {}
+        self.port_toggles: dict[str, QPushButton] = {}
         for role in self.profile.roles():
             pill = theme.StatusPill()
             pill.setToolTip(tr('클릭 = 해당 콘솔로 이동'))
             pill.mousePressEvent = self._pill_click_handler(role)
             self.pills[role] = pill
             pill_row.addWidget(pill)
+            # 연결/해제는 **버튼으로만** 한다 — 필 본체를 토글로 만들면 콘솔로
+            # 이동하려다 시험 중인 포트를 끊는 사고가 난다
+            toggle = QPushButton('🔌')
+            toggle.setObjectName('toolToggle')
+            toggle.setCheckable(True)
+            toggle.setCursor(Qt.PointingHandCursor)
+            toggle.setFixedWidth(30)
+            toggle.clicked.connect(lambda _c=False, r=role: self.toggle_port(r))
+            self.port_toggles[role] = toggle
+            pill_row.addWidget(toggle)
         pill_row.addStretch(1)
         self.trigger_chip = QPushButton("⚡ 0")
         self.trigger_chip.setObjectName("toolToggle")
@@ -166,6 +177,7 @@ class MainWindow(QMainWindow):
                                hide_empty=self.profile.hide_empty,
                                max_blocks=min(self.profile.capacity_per_port, 200_000))
             pane.pop_out_requested.connect(self.pop_out_pane)
+            pane.zoom_requested.connect(self.change_font)
             pane.search_committed.connect(self._remember_search)
             pane.search.edit.load_history(
                 list(reversed(self.profile.search_history.get("console", []))))
@@ -178,6 +190,7 @@ class MainWindow(QMainWindow):
                                        max_blocks=min(self.profile.capacity_per_port, 200_000))
         self.merged_pane.state_pill.hide()
         self.merged_pane.pop_out_requested.connect(self.pop_out_pane)
+        self.merged_pane.zoom_requested.connect(self.change_font)
 
         self.console_holder = QWidget()
         self.console_holder_layout = QVBoxLayout(self.console_holder)
@@ -346,6 +359,8 @@ class MainWindow(QMainWindow):
         active = self.profile.active_roles()
         for role, pill in self.pills.items():
             pill.setVisible(role in active)
+            if role in self.port_toggles:
+                self.port_toggles[role].setVisible(role in active)
         self.command_panel.set_roles(active, self._port_labels())
         self._apply_layout(self.layout_mode)
 
@@ -618,6 +633,13 @@ class MainWindow(QMainWindow):
             com = self._shown_com(role)
             pill.set_state(self.session.state_of(role),
                            shown if com == shown else f"{shown} {com}")
+            toggle = self.port_toggles.get(role)
+            if toggle is not None:
+                connected = self.session.is_connected(role)
+                if toggle.isChecked() != connected:
+                    toggle.setChecked(connected)
+                    toggle.setToolTip(tr('{0} 연결 해제').format(shown) if connected
+                                      else tr('{0} 연결').format(shown))
 
         if self.settings_dialog is not None:
             # 창을 닫아도 계속 돌린다 — probe 가 진행 중일 수 있고, 결과를 회수해야 한다
@@ -702,8 +724,15 @@ class MainWindow(QMainWindow):
                 self._report_open_failure(role, err)
                 self.set_status(tr('{0} 열기 실패: {1}').format(role, err[:80]), theme.DANGER)
         else:
+            recording = self.session.store.recording
             self.session.disconnect(role)
-            self.set_status(tr('{0} 해제됨').format(role), theme.TEXT_SUB)
+            diag.info("app", f"{role} 연결 해제 (사용자)")
+            if recording:
+                # 기록 중이면 이 포트의 로그가 여기서 끊긴다 — 나중에 "왜 비었지" 를 막는다
+                self.set_status(tr('{0} 해제됨 — 기록 중이라 이 포트 로그는 여기서 끊깁니다')
+                                .format(role), theme.WARNING)
+            else:
+                self.set_status(tr('{0} 해제됨').format(role), theme.TEXT_SUB)
 
     # ------------------------------------------------------------------ 룰 / 필터
 
@@ -739,11 +768,12 @@ class MainWindow(QMainWindow):
                           highlight_rules=self.profile.highlight_rules,
                           labels=self._port_labels())
         view.pane.set_font_size(self.profile.console_font_size)
+        view.pane.zoom_requested.connect(self.change_font)
         view.pane.set_word_wrap(self.profile.word_wrap)
         view.pane.set_ansi_color(self.profile.ansi_color)
         view.closed.connect(self._on_filter_closed)
         self.filter_views.append(view)
-        view.show()
+        self._add_bottom_dock(view)
         view.edit.setFocus()
 
     def _on_filter_closed(self, view: FilterView) -> None:
@@ -847,6 +877,14 @@ class MainWindow(QMainWindow):
         panes = [*self.panes.values(), self.merged_pane]
         panes += [view.pane for view in self.filter_views]
         return panes
+
+    def change_terminal_font(self, delta: int) -> None:
+        """터미널 글자 크기 — 터미널끼리 공통. 격자 계산이 폰트에 묶여 있어 콘솔과 분리한다."""
+        size = 10 if delta == 0 else self.profile.terminal_font_size + delta
+        self.profile.terminal_font_size = max(6, min(24, size))
+        for dock in self.terminal_docks:
+            if dock.pane is not None:
+                dock.pane.set_font_size(self.profile.terminal_font_size)
 
     def change_font(self, delta: int) -> None:
         """콘솔 글자 크기 — 전 콘솔·필터드뷰 공통. 0 = 기본값 복원."""
@@ -1043,6 +1081,8 @@ class MainWindow(QMainWindow):
             return None
         dock = LogViewerDock(self.profile, paths, self)
         self._add_bottom_dock(dock)
+        dock.viewer.pane.set_font_size(self.profile.console_font_size)
+        dock.viewer.pane.zoom_requested.connect(self.change_font)
         dock.closed.connect(self._on_viewer_closed)
         self.viewer_docks.append(dock)
         diag.info("app", f"로그 뷰어 열림 files={len(paths)}")
@@ -1089,6 +1129,9 @@ class MainWindow(QMainWindow):
         """내장 터미널 도크 — 메인 창에 붙이거나 떼어내 별도 창으로 쓴다."""
         dock = TerminalDock(self)
         self._add_bottom_dock(dock)
+        if dock.pane is not None:
+            dock.pane.set_font_size(self.profile.terminal_font_size)
+            dock.pane.zoom_requested.connect(self.change_terminal_font)
         dock.closed.connect(self._on_terminal_closed)
         self.terminal_docks.append(dock)
         if dock.pane is not None:

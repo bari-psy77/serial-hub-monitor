@@ -72,9 +72,14 @@ class TerminalScreen(QWidget):
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt 시그니처
         self._owner.paint_screen(self, event)
 
+    def wheelEvent(self, event) -> None:  # noqa: N802 - 휠은 화면 위젯이 먼저 받는다
+        self._owner.wheelEvent(event)
+
 
 class TerminalPane(QWidget):
     """모노스페이스 그리드 렌더러 + 키보드/IME → pty 입력 + 세로 스크롤바."""
+
+    zoom_requested = Signal(int)      # Ctrl+휠 — 소유자가 터미널 공통으로 적용한다
 
     def __init__(self, session, parent: QWidget | None = None):
         super().__init__(parent)
@@ -235,8 +240,29 @@ class TerminalPane(QWidget):
             return
         super().keyPressEvent(event)
 
+    def set_font_size(self, point_size: int) -> None:
+        """터미널 격자 폰트 — 콘솔과 별개 값이다 (격자 계산이 폰트에 묶여 있다)."""
+        size = max(6, min(24, int(point_size)))
+        self._term_font.setPointSize(size)
+        self._bold_font.setPointSize(size)
+        self.session.resize(*self._grid_size())
+        self._sync_scrollbar()
+        self.screen.update()
+
+    def font_size(self) -> int:
+        return self._term_font.pointSize()
+
+    def _grid_size(self) -> tuple[int, int]:
+        cell_w, cell_h = self._cell_size()
+        return (max(20, int(self.screen.width() / cell_w)),
+                max(5, int(self.screen.height() / cell_h)))
+
     def wheelEvent(self, event) -> None:  # noqa: N802 - Qt 시그니처
         delta = event.angleDelta().y()
+        if event.modifiers() & Qt.ControlModifier and delta:
+            self.zoom_requested.emit(1 if delta > 0 else -1)
+            event.accept()
+            return
         if delta == 0:
             super().wheelEvent(event)
             return
@@ -269,11 +295,8 @@ class TerminalPane(QWidget):
         menu.exec(self.mapToGlobal(pos))
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt 시그니처
-        cell_w, cell_h = self._cell_size()
         # 스크롤바가 차지하는 폭을 빼고 격자를 잡는다 (screen 위젯 기준)
-        cols = max(20, int(self.screen.width() / cell_w))
-        rows = max(5, int(self.screen.height() / cell_h))
-        self.session.resize(cols, rows)
+        self.session.resize(*self._grid_size())
         self._sync_scrollbar()
         super().resizeEvent(event)
 

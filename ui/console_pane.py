@@ -228,6 +228,7 @@ class ConsolePane(QWidget):
     focus_gained = Signal(str)
     pop_out_requested = Signal(object)
     search_committed = Signal(str)
+    zoom_requested = Signal(int)      # Ctrl+휠 — 소유자가 전 콘솔에 공통 적용한다
 
     def __init__(self, title: str, store: LogStore, ports: list[str],
                  ts_mode: str = TS_ABSOLUTE, hide_empty: bool = True,
@@ -360,6 +361,16 @@ class ConsolePane(QWidget):
 
     # ------------------------------------------------------------------ 표시 옵션
 
+    def wheelEvent(self, event) -> None:  # noqa: N802 - Qt 시그니처
+        """Ctrl+휠 = 글자 크기. Ctrl 없이는 평소대로 스크롤한다."""
+        if event.modifiers() & Qt.ControlModifier:
+            steps = event.angleDelta().y()
+            if steps:
+                self.zoom_requested.emit(1 if steps > 0 else -1)
+                event.accept()
+                return
+        super().wheelEvent(event)
+
     def set_font_size(self, point_size: int) -> None:
         """콘솔 폰트는 QSS 가 아니라 여기서만 정한다 (theme.py 주석 참조).
 
@@ -399,6 +410,14 @@ class ConsolePane(QWidget):
             self._jump_to_end()
 
     def eventFilter(self, obj, event) -> bool:  # noqa: N802 - Qt 시그니처
+        # ★휠은 본문(QPlainTextEdit)이 먼저 받는다 — pane 의 wheelEvent 까지
+        #   올라오지 않으므로 여기서 Ctrl+휠을 가로챈다
+        if obj is self.view and event.type() == QEvent.Wheel \
+                and event.modifiers() & Qt.ControlModifier:
+            steps = event.angleDelta().y()
+            if steps:
+                self.zoom_requested.emit(1 if steps > 0 else -1)
+                return True
         if (obj is self.view and event.type() == QEvent.KeyPress
                 and event.key() in (Qt.Key_Return, Qt.Key_Enter)):
             self._enter_pressed()

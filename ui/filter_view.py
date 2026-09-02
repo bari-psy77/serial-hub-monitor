@@ -9,25 +9,35 @@ import time
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (QCheckBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit,
-                               QPushButton, QVBoxLayout, QWidget)
+                               QDockWidget, QPushButton, QVBoxLayout, QWidget)
 
 from ..core.diag import diag
 from ..core.filters import FilterRule, HighlightRule
 from ..core.logstore import LogStore
 from .console_pane import ConsolePane
+from .dock_common import make_maximize_button
 from ..core.i18n import tr
 
 
-class FilterView(QWidget):
+class FilterView(QDockWidget):
+    """필터 매치만 보는 도크.
+
+    ★래퍼(LogViewerDock 처럼 감싸기)를 쓰지 않고 이 클래스 자체를 도크로 만든다 —
+    `view.pane`·`view.edit`·`view.save_button` 을 쓰는 호출부와 테스트가 그대로
+    남고, 한 겹 더 들어가는 위임 계층이 생기지 않는다.
+    """
     closed = Signal(object)
+    _serial = 0   # id() 는 재사용돼 도크 배치 기억이 꼬인다 — 단조 증가 번호
 
     def __init__(self, store: LogStore, roles: list[str], rule: FilterRule,
                  ts_mode: str, hide_empty: bool,
                  highlight_rules: list[HighlightRule] | None = None,
                  labels: dict[str, str] | None = None,
                  parent: QWidget | None = None):
-        super().__init__(parent)
-        self.setWindowFlag(Qt.Window, True)
+        super().__init__(tr('필터드뷰'), parent)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        FilterView._serial += 1
+        self.setObjectName(f'filterview_dock_{FilterView._serial}')
         self.store = store
         self.roles = list(roles)
         # 화면에 보일 이름 — 사용자가 포트 이름을 바꿨으면 그 이름을 쓴다
@@ -35,7 +45,8 @@ class FilterView(QWidget):
         self.rule = rule
         self._compiled = rule.compiled()
 
-        outer = QVBoxLayout(self)
+        body = QWidget(self)
+        outer = QVBoxLayout(body)
         outer.setContentsMargins(12, 12, 12, 12)
         outer.setSpacing(10)
 
@@ -58,6 +69,7 @@ class FilterView(QWidget):
         row.addWidget(self.regex_box)
         row.addWidget(self.backfill_box)
         row.addWidget(self.save_button)
+        self.button_row = row
 
         self.port_boxes: dict[str, QCheckBox] = {}
         for role in self.roles:
@@ -76,6 +88,9 @@ class FilterView(QWidget):
         if highlight_rules:
             self.pane.set_highlight_rules(highlight_rules)
         outer.addWidget(self.pane, 1)
+        self.setWidget(body)
+        self.maximize_button = make_maximize_button(self)
+        self.button_row.addWidget(self.maximize_button)
 
         # 타이핑마다 소급 채움을 다시 돌리면 렉이 걸린다
         self._refresh_timer = QTimer(self)

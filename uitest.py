@@ -925,6 +925,20 @@ def main() -> int:  # noqa: PLR0915
                                         for r in ("MLOG", "SHELL", "UCLI")), timeout=8.0))
         spin(app, 0.6)
 
+        # ------------------------------------------------- S6i 상태 필 연결 토글
+        print("\n== S6i. 상태 필 연결 토글 ==")
+        toggle = window.port_toggles['SHELL']
+        check("연결 중에는 해제 버튼으로 보인다", toggle.isChecked())
+        toggle.click()
+        check("토글로 해제된다",
+              wait_for(app, lambda: not window.session.is_connected('SHELL')))
+        check("다른 포트는 그대로 연결돼 있다", window.session.is_connected('MLOG'))
+        toggle.click()
+        check("다시 누르면 연결된다",
+              wait_for(app, lambda: window.session.is_connected('SHELL'), timeout=8.0))
+        check("필 본체 클릭은 여전히 포커스 이동이다",
+              window.panes['SHELL'].isVisible())
+
         # ---------------------------------------------------------- S7 재부팅 생존
         print("\n== S7. UCLI reboot — 단절·자동 재접속·부팅 배너 캡처 ==")
         panel.select_role("UCLI")
@@ -1142,6 +1156,21 @@ def main() -> int:  # noqa: PLR0915
                   wait_for(app, lambda: _first_line().startswith(("Windows PowerShell", "PS ")),
                            timeout=25.0),
                   repr(tsession.buffer.text()[:120]))
+            # Ctrl+휠 폰트 확대 — 도크가 실제로 배선했는지 (슬롯 동작은 selftest)
+            from PySide6.QtCore import QPoint as _QPoint, QPointF as _QPointF
+            from PySide6.QtGui import QWheelEvent as _QWheelEvent
+            font_before = profile.terminal_font_size
+            app.sendEvent(tdock.pane.screen, _QWheelEvent(
+                _QPointF(10, 10), _QPointF(10, 10), _QPoint(0, 0), _QPoint(0, 120),
+                _Qt.NoButton, _Qt.KeyboardModifier.ControlModifier,
+                _Qt.ScrollPhase.NoScrollPhase, False))
+            spin(app, 0.3)
+            check("터미널 도크가 Ctrl+휠 확대를 배선한다",
+                  profile.terminal_font_size == font_before + 1,
+                  f"{font_before} -> {profile.terminal_font_size}")
+            check("터미널 폰트가 실제로 커졌다",
+                  tdock.pane.font_size() == profile.terminal_font_size)
+
             tdock.close()
             spin(app, 0.4)
             check("터미널 도크를 닫으면 목록에서 빠진다", tdock not in window.terminal_docks)

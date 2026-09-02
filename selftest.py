@@ -1248,8 +1248,20 @@ def test_gui(tmp: str) -> None:
     check("검색 매치 카운트", mlog_pane.search.count_label.text() not in ("0/0", ""),
           mlog_pane.search.count_label.text())
 
+    from PySide6.QtWidgets import QDockWidget as _QDockWidget
     window.open_filter_view(FR(pattern="line 12", ports=["MLOG"]))
     view = window.filter_views[-1]
+    pump(app)
+    check("필터드뷰는 하단 도크로 뜬다 (독립 창이 아니라)",
+          isinstance(view, _QDockWidget) and not view.isFloating()
+          and window.dockWidgetArea(view) == Qt.BottomDockWidgetArea,
+          f"floating={view.isFloating()}")
+    check("필터드뷰에도 최대화 버튼이 있다", hasattr(view, "maximize_button"))
+    view.setFloating(True)
+    pump(app)
+    check("떼어내 독립 창으로도 쓸 수 있다", view.isFloating() and view.isVisible())
+    view.setFloating(False)
+    pump(app)
     view.pump()
     pump(app)
     text = view.pane.view.toPlainText()
@@ -1283,6 +1295,43 @@ def test_gui(tmp: str) -> None:
     log_page.date_folder_box.setChecked(False)
     log_page.revert()
     check("revert 하면 프로파일 값으로 되돌아간다", log_page.date_folder_box.isChecked())
+
+    # 상태 필 옆 연결 토글 버튼 — 필 본체 클릭은 포커스 이동 그대로
+    check("포트마다 연결 토글 버튼이 있다",
+          set(window.port_toggles) == set(profile.roles()),
+          str(list(window.port_toggles)))
+    window.port_toggles['MLOG'].click()
+    pump(app)
+    check("COM 미지정이면 연결하지 않고 안내한다",
+          not window.session.is_connected('MLOG') and bool(window.status_left.text()),
+          window.status_left.text())
+
+    # Ctrl+휠 폰트 확대/축소 — 전 콘솔 공통 (Ctrl+/- 와 같은 경로)
+    from PySide6.QtCore import QPoint as _QPoint, QPointF as _QPointF
+    from PySide6.QtGui import QWheelEvent as _QWheelEvent
+
+    def _wheel_on(widget, delta: int, mods):
+        app.sendEvent(widget, _QWheelEvent(
+            _QPointF(10, 10), _QPointF(10, 10), _QPoint(0, 0), _QPoint(0, delta),
+            Qt.NoButton, mods, Qt.ScrollPhase.NoScrollPhase, False))
+        pump(app)
+
+    before = profile.console_font_size
+    _wheel_on(mlog_pane.view, 120, Qt.KeyboardModifier.ControlModifier)
+    check("Ctrl+휠 위로 = 글자 커진다",
+          profile.console_font_size == before + 1,
+          f"{before} -> {profile.console_font_size}")
+    check("콘솔에 실제로 반영된다",
+          mlog_pane.font_size() == profile.console_font_size,
+          f"{mlog_pane.font_size()} vs {profile.console_font_size}")
+    check("다른 콘솔도 같이 바뀐다 (전체 공통)",
+          window.panes['SHELL'].font_size() == profile.console_font_size)
+    _wheel_on(mlog_pane.view, -120, Qt.KeyboardModifier.ControlModifier)
+    check("Ctrl+휠 아래로 = 글자 작아진다", profile.console_font_size == before,
+          str(profile.console_font_size))
+    _wheel_on(mlog_pane.view, 120, Qt.KeyboardModifier.NoModifier)
+    check("Ctrl 없이는 폰트가 안 바뀐다 (평소 스크롤)",
+          profile.console_font_size == before, str(profile.console_font_size))
 
     # 로그 뷰어 — 과거 파일을 열어 검색·필터 (스펙 2026-08-14)
     from .ui import log_viewer as log_viewer_mod
@@ -1473,6 +1522,29 @@ def test_gui(tmp: str) -> None:
         pump(app)
         check("스크롤바를 맨 위로 옮기면 과거가 보인다",
               "scrollline29" not in stub.buffer.text(), stub.buffer.text())
+        # 터미널은 격자 렌더러라 콘솔과 폰트 체계가 다르다 — 별도 공통값으로 확대
+        term.show()
+        # 스텁 pane 은 도크가 아니라 테스트가 만든 것이라 배선이 없다 — 슬롯을 직접
+        # 잇고 동작을 본다. 실제 도크가 이 슬롯에 연결하는지는 uitest 가 검증한다.
+        term.zoom_requested.connect(window.change_terminal_font)
+        pump(app)
+        term_before = profile.terminal_font_size
+        app.sendEvent(term.screen, _QWheelEvent(
+            _QPointF(10, 10), _QPointF(10, 10), _QPoint(0, 0), _QPoint(0, 120),
+            Qt.NoButton, Qt.KeyboardModifier.ControlModifier,
+            Qt.ScrollPhase.NoScrollPhase, False))
+        pump(app)
+        check("터미널도 Ctrl+휠로 커진다",
+              profile.terminal_font_size == term_before + 1,
+              f"{term_before} -> {profile.terminal_font_size}")
+        # 도크에 붙은 pane 이 아니라 스텁이라 슬롯이 닿지 않는다 — 적용 함수는 직접 본다
+        term.set_font_size(profile.terminal_font_size)
+        check("터미널 폰트 적용 함수가 실제로 반영한다",
+              term.font_size() == profile.terminal_font_size,
+              f"{term.font_size()} vs {profile.terminal_font_size}")
+        check("콘솔 폰트는 터미널 확대에 영향받지 않는다",
+              profile.console_font_size == before, str(profile.console_font_size))
+
         term.deleteLater()
         pump(app)
 
