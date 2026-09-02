@@ -16,6 +16,7 @@ from . import theme
 
 class GeneralPage(QWidget):
     language_changed = Signal(str)
+    theme_changed = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -45,10 +46,36 @@ class GeneralPage(QWidget):
         self.note.setWordWrap(True)
         body.addWidget(self.note)
 
+        theme_card = theme.Card(tr('화면 테마'))
+        theme_body = theme_card.body()
+        theme_row = QHBoxLayout()
+        theme_row.setSpacing(8)
+        theme_row.addWidget(QLabel(tr('밝기')))
+        self.theme_combo = QComboBox()
+        # ★itemData 는 저장되는 키(light/dark), itemText 는 표시명 — 언어가 바뀌어도
+        #   저장 값이 흔들리면 안 된다 (색 이름·포트 role 과 같은 규칙)
+        for key, label in (("light", tr('라이트')), ("dark", tr('다크'))):
+            self.theme_combo.addItem(label, key)
+        index = self.theme_combo.findData(config_mod.theme())
+        self.theme_combo.setCurrentIndex(index if index >= 0 else 0)
+        self.theme_combo.setMinimumWidth(180)
+        self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
+        theme_row.addWidget(self.theme_combo)
+        theme_row.addStretch(1)
+        theme_body.addLayout(theme_row)
+        theme_note = QLabel(tr('고르면 바로 적용됩니다 (언어와 달리 다시 켜지 않아도 됩니다).'))
+        theme_note.setObjectName("hint")
+        theme_note.setWordWrap(True)
+        theme_body.addWidget(theme_note)
+
         outer.addWidget(card)
+        outer.addWidget(theme_card)
         outer.addStretch(1)
 
         self.combo.currentIndexChanged.connect(self._on_changed)
+
+    def _on_theme_changed(self, _index: int) -> None:
+        self.theme_changed.emit(self.theme_combo.currentData())
 
     def _on_changed(self) -> None:
         code = self.combo.currentData()

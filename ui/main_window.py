@@ -287,6 +287,7 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.session, self)
         dialog.applied.connect(self._on_settings_applied)
         dialog.log_settings_applied.connect(self.retarget_logs)
+        dialog.theme_changed.connect(self.apply_theme_change)
         dialog.connection_page.connect_all_requested.connect(self.connect_all)
         dialog.connection_page.disconnect_all_requested.connect(self.disconnect_all)
         dialog.connection_page.port_toggle_requested.connect(self.toggle_port)

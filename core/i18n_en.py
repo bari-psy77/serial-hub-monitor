@@ -76,6 +76,12 @@ EN: dict[str, str] = {
     "마커 삽입": "Insert marker",
     "마커 내용 (### 자동 부착)": "Marker text (### is added automatically)",
     "화면 언어": "Display language",
+    "화면 테마": "Appearance",
+    "밝기": "Theme",
+    "라이트": "Light",
+    "다크": "Dark",
+    "고르면 바로 적용됩니다 (언어와 달리 다시 켜지 않아도 됩니다).":
+        "Applies immediately — unlike the language, no restart needed.",
     "언어 (Language)": "Language",
     "일반 (General)": "General",
     "연결 (Connection)": "Connection",

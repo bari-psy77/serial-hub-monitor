@@ -40,7 +40,8 @@ class SettingsDialog(QDialog):
     PAGE_GENERAL = PAGE_GENERAL
 
     applied = Signal()          # 룰·연결 등 즉시 반영되는 변경
-    log_settings_applied = Signal()   # OK 를 눌러 확정된 로그 설정
+    log_settings_applied = Signal()
+    theme_changed = Signal(str)   # OK 를 눌러 확정된 로그 설정
 
     def __init__(self, session: SerialHubSession, parent: QWidget | None = None,
                  page: int = PAGE_CONNECTION):
@@ -66,6 +67,7 @@ class SettingsDialog(QDialog):
         self.connection_page.ports_changed.connect(self.log_page.refresh_ports)
         self.profile_page = ProfilePage(session)
         self.general_page = GeneralPage()
+        self.general_page.theme_changed.connect(self.theme_changed)
 
         self.stack = QStackedWidget()
         for widget in (self.connection_page, self.rules_page, self.log_page, self.profile_page,

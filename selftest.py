@@ -1386,6 +1386,22 @@ def test_gui(tmp: str) -> None:
     check("되돌려도 글자 크기는 그대로", mlog_pane.font_size() == zoomed)
     window.change_font(0)
 
+    # 설정 > 일반의 테마 콤보 — 고르면 즉시 적용된다
+    general = window.settings().general_page
+    check("일반 페이지에 테마 콤보가 있다", hasattr(general, "theme_combo"))
+    check("테마 콤보는 라이트·다크 2개", general.theme_combo.count() == 2,
+          str(general.theme_combo.count()))
+    check("콤보의 itemData 는 저장 키다 (표시명이 아니라)",
+          [general.theme_combo.itemData(i) for i in range(2)] == ["light", "dark"],
+          str([general.theme_combo.itemData(i) for i in range(2)]))
+    general.theme_combo.setCurrentIndex(1)
+    pump(app)
+    check("콤보를 바꾸면 즉시 적용된다 (언어와 달리 재시작 불필요)",
+          theme_mod.CURRENT == "dark", theme_mod.CURRENT)
+    general.theme_combo.setCurrentIndex(0)
+    pump(app)
+    check("되돌리면 라이트", theme_mod.CURRENT == "light")
+
     # 상태 필 옆 연결 토글 버튼 — 필 본체 클릭은 포커스 이동 그대로
     check("포트마다 연결 토글 버튼이 있다",
           set(window.port_toggles) == set(profile.roles()),
