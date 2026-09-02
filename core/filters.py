@@ -15,17 +15,40 @@ from .logstore import LogLine
 # 하이라이트 팔레트 — 검색 강조(주황)와 시각적으로 구분되도록 제한한다.
 # ★키는 **프로파일 JSON 에 저장되는 식별자**다. 번역하면 안 된다 — 영어로 켠 PC 에서
 #   저장한 프로파일을 한국어 PC 에서 열면 색을 못 찾는다. 화면에 보일 때만 tr() 를 거친다.
-HIGHLIGHT_COLORS = {
-    "빨강": "#FFD5D5",
-    "주황": "#FFE2C2",
-    "노랑": "#FFF4C2",
-    "초록": "#D3F5E3",
-    "파랑": "#D6E8FF",
-    "보라": "#E6DBFF",
-    "회색": "#E5E8EB",
+# ★색 **이름**은 프로파일 JSON 에 저장되는 식별자다 — 테마·언어와 무관하게 고정이고,
+#   두 팔레트가 같은 키를 가져야 한다 (다른 PC·다른 테마에서 프로파일이 깨지지 않게).
+HIGHLIGHT_PALETTES = {
+    "light": {
+        "빨강": "#FFD5D5", "주황": "#FFE2C2", "노랑": "#FFF4C2", "초록": "#D3F5E3",
+        "파랑": "#D6E8FF", "보라": "#E6DBFF", "회색": "#E5E8EB",
+    },
+    "dark": {
+        "빨강": "#5A2A2A", "주황": "#5E4426", "노랑": "#5C5326", "초록": "#245239",
+        "파랑": "#22415E", "보라": "#42335E", "회색": "#3A3F44",
+    },
 }
+SEARCH_PALETTE = {"light": "#FFC98A", "dark": "#7A5522"}
 DEFAULT_HIGHLIGHT_COLOR = "노랑"
-SEARCH_HIGHLIGHT_COLOR = "#FFC98A"
+_CURRENT = "light"
+
+
+def set_theme(name: str) -> None:
+    global _CURRENT
+    _CURRENT = name if name in HIGHLIGHT_PALETTES else "light"
+
+
+def highlight_names() -> list[str]:
+    """고를 수 있는 색 이름 — 순서까지 고정이다 (콤보 순서가 흔들리면 안 된다)."""
+    return list(HIGHLIGHT_PALETTES["light"])
+
+
+def highlight_hex(name: str) -> str:
+    table = HIGHLIGHT_PALETTES[_CURRENT]
+    return table.get(name, table[DEFAULT_HIGHLIGHT_COLOR])
+
+
+def search_hex() -> str:
+    return SEARCH_PALETTE[_CURRENT]
 
 
 def compile_pattern(pattern: str, is_regex: bool, case_sensitive: bool) -> re.Pattern | None:
@@ -99,7 +122,7 @@ class HighlightRule:
         return compile_pattern(self.pattern, self.is_regex, self.case_sensitive)
 
     def qcolor_hex(self) -> str:
-        return HIGHLIGHT_COLORS.get(self.color, HIGHLIGHT_COLORS[DEFAULT_HIGHLIGHT_COLOR])
+        return highlight_hex(self.color)
 
     def to_dict(self) -> dict:
         return {

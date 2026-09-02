@@ -16,7 +16,8 @@ from PySide6.QtGui import (QColor, QFont, QFontDatabase, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QHBoxLayout, QLabel, QPlainTextEdit,
                                QPushButton, QSizePolicy, QTextEdit, QVBoxLayout, QWidget)
 
-from ..core.filters import SEARCH_HIGHLIGHT_COLOR, HighlightRule, compile_pattern
+from ..core import filters as filters_mod
+from ..core.filters import HighlightRule, compile_pattern
 from ..core.logstore import (TS_ABSOLUTE, TS_MODES, TS_OFF, TS_RELATIVE, LogStore,
                              render_line, render_prefix_len)
 from ..core import ansi
@@ -610,7 +611,7 @@ class ConsolePane(QWidget):
         text = self.view.toPlainText()
         selections = []
         fmt = QTextCharFormat()
-        fmt.setBackground(QColor(SEARCH_HIGHLIGHT_COLOR))
+        fmt.setBackground(QColor(filters_mod.search_hex()))
         document = self.view.document()
         for match in rx.finditer(text):
             start, end = match.span()

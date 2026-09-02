@@ -13,7 +13,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QHBoxLayout, QHeade
                                QVBoxLayout, QWidget)
 
 from ..core.config import Profile
-from ..core.filters import (DEFAULT_HIGHLIGHT_COLOR, HIGHLIGHT_COLORS, FilterRule, HighlightRule,
+from ..core import filters as filters_mod
+from ..core.filters import (DEFAULT_HIGHLIGHT_COLOR, FilterRule, HighlightRule,
                             RedactRule, TriggerRule, compile_pattern)
 from . import theme
 from ..core.i18n import tr
@@ -201,7 +202,7 @@ class RulesPage(QWidget):
         """색 이름만 흰 칸에 띄우면 실제 하이라이트가 어떻게 보일지 알 수 없다 —
         칸과 목록을 그 색으로 칠해 로그에서 보일 모습 그대로 보여준다."""
         combo = QComboBox()
-        for name, hex_value in HIGHLIGHT_COLORS.items():
+        for name, hex_value in ((n, filters_mod.highlight_hex(n)) for n in filters_mod.highlight_names()):
             combo.addItem(tr(name), name)   # 보이는 건 번역, 저장되는 값은 원래 이름
             row = combo.count() - 1
             combo.setItemData(row, QBrush(QColor(hex_value)), Qt.BackgroundRole)
@@ -216,8 +217,8 @@ class RulesPage(QWidget):
 
     @staticmethod
     def _paint_combo(combo: QComboBox) -> None:
-        hex_value = HIGHLIGHT_COLORS.get(combo.currentData(),
-                                         HIGHLIGHT_COLORS[DEFAULT_HIGHLIGHT_COLOR])
+        # highlight_hex 가 모르는 이름을 기본색으로 폴백하므로 여기서 따로 처리하지 않는다
+        hex_value = filters_mod.highlight_hex(combo.currentData())
         combo.setStyleSheet(
             f"QComboBox {{ background: {hex_value}; color: {theme.TEXT};"
             f" border: 1px solid {theme.BORDER}; border-radius: 8px; padding: 4px 8px; }}")

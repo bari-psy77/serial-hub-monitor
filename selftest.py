@@ -965,6 +965,27 @@ def test_filters() -> None:
     check("하이라이트 룰 색 매핑", HighlightRule("x", "주황").qcolor_hex().startswith("#"))
 
 
+    # 하이라이트 색은 테마를 따라가되, **이름은 프로파일에 저장되는 식별자**라 고정이다
+    from .core import filters as filters_mod
+    light_names = filters_mod.highlight_names()
+    light_red = filters_mod.highlight_hex("빨강")
+    light_search = filters_mod.search_hex()
+    filters_mod.set_theme("dark")
+    check("하이라이트 이름은 테마와 무관하게 같다 (프로파일 호환)",
+          filters_mod.highlight_names() == light_names, str(filters_mod.highlight_names()))
+    check("다크에서는 색 값이 달라진다",
+          filters_mod.highlight_hex("빨강") != light_red,
+          f"{light_red} -> {filters_mod.highlight_hex('빨강')}")
+    check("검색 하이라이트도 테마를 따른다",
+          filters_mod.search_hex() != light_search and filters_mod.search_hex().startswith("#"))
+    check("모르는 이름은 기본색으로 폴백",
+          filters_mod.highlight_hex("없는색")
+          == filters_mod.highlight_hex(filters_mod.DEFAULT_HIGHLIGHT_COLOR))
+    check("룰의 색도 테마를 따라간다",
+          HighlightRule("X", "빨강").qcolor_hex() == filters_mod.highlight_hex("빨강"))
+    filters_mod.set_theme("light")
+    check("되돌리면 원래 색", filters_mod.highlight_hex("빨강") == light_red)
+
 def test_probe_classification() -> None:
     print("\n== probe 판정 ==")
     token = portscan.DEFAULT_PROBE_TOKEN
@@ -1887,11 +1908,11 @@ def test_i18n() -> None:
           "; ".join(sorted(set(frozen))))
 
     # 색 이름은 프로파일에 저장되는 식별자다 — 번역되면 저장한 색을 못 찾는다
-    from .core.filters import DEFAULT_HIGHLIGHT_COLOR, HIGHLIGHT_COLORS
+    from .core.filters import DEFAULT_HIGHLIGHT_COLOR, highlight_names
     i18n.set_language("en")
     check("색 팔레트 키는 언어와 무관하게 고정",
-          "노랑" in HIGHLIGHT_COLORS and DEFAULT_HIGHLIGHT_COLOR == "노랑",
-          str(list(HIGHLIGHT_COLORS)[:3]))
+          "노랑" in highlight_names() and DEFAULT_HIGHLIGHT_COLOR == "노랑",
+          str(highlight_names()[:3]))
 
     check("영어로 바꾸면 영어가 나온다", i18n.tr("확인") == "OK", i18n.tr("확인"))
     check("표에 없는 문구는 원문 유지", i18n.tr("존재하지 않는 문구") == "존재하지 않는 문구")
