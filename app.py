@@ -36,6 +36,9 @@ from .core.diag import diag  # noqa: E402
 i18n.set_language(config_mod.language())
 
 from .ui import theme  # noqa: E402
+
+# 색도 같은 이유로 UI 를 만들기 전에 정한다 — 모듈 최상위에서 색을 굳히지 않기 위해
+theme.set_theme(config_mod.theme())
 from .ui.appicon import app_icon  # noqa: E402
 from .ui.main_window import MainWindow  # noqa: E402
 from .core.i18n import tr  # noqa: E402

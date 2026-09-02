@@ -9,27 +9,55 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton,
                                QSizePolicy, QVBoxLayout, QWidget)
 
-BG = "#F2F4F6"
-CARD_BG = "#FFFFFF"
-BORDER = "#E5E8EB"
-TEXT = "#191F28"
-TEXT_SUB = "#8B95A1"
-PRIMARY = "#3182F6"
-PRIMARY_DARK = "#1B64DA"
-SUCCESS = "#00C471"
-DANGER = "#F04452"
-WARNING = "#FFB331"
-CONSOLE_BG = "#FFFFFF"
-CONSOLE_TEXT = "#191F28"
-TX_TEXT = "#4E5968"
+PALETTES = {
+    # 지금까지의 밝은 화면
+    "light": {
+        "BG": "#F2F4F6", "CARD_BG": "#FFFFFF", "BORDER": "#E5E8EB",
+        "TEXT": "#191F28", "TEXT_SUB": "#8B95A1",
+        "PRIMARY": "#3182F6", "PRIMARY_DARK": "#1B64DA",
+        "SUCCESS": "#00C471", "DANGER": "#F04452", "WARNING": "#FFB331",
+        "CONSOLE_BG": "#FFFFFF", "CONSOLE_TEXT": "#191F28", "TX_TEXT": "#4E5968",
+        "BANNER_BG": "#FFF4C2", "BANNER_TEXT": "#8A6D00",
+    },
+    # 어두운 화면 — 콘솔 본문까지 함께 바뀐다
+    "dark": {
+        "BG": "#16181D", "CARD_BG": "#1E2127", "BORDER": "#2C313A",
+        "TEXT": "#E6E9EF", "TEXT_SUB": "#8B95A1",
+        "PRIMARY": "#4C8DFF", "PRIMARY_DARK": "#2F6FE0",
+        "SUCCESS": "#23D18B", "DANGER": "#F14C4C", "WARNING": "#F5C451",
+        "CONSOLE_BG": "#14171C", "CONSOLE_TEXT": "#DCE1E8", "TX_TEXT": "#9AA4B2",
+        "BANNER_BG": "#5C5326", "BANNER_TEXT": "#FFE9A3",
+    },
+}
+CURRENT = "light"
+
+# 토큰의 초기값 = 라이트. set_theme() 이 globals() 를 갱신해 갈아끼운다 —
+# 여기 이름을 명시해 두어야 정적 분석(ruff)이 이 이름들을 볼 수 있다.
+BG = PALETTES["light"]["BG"]
+CARD_BG = PALETTES["light"]["CARD_BG"]
+BORDER = PALETTES["light"]["BORDER"]
+TEXT = PALETTES["light"]["TEXT"]
+TEXT_SUB = PALETTES["light"]["TEXT_SUB"]
+PRIMARY = PALETTES["light"]["PRIMARY"]
+PRIMARY_DARK = PALETTES["light"]["PRIMARY_DARK"]
+SUCCESS = PALETTES["light"]["SUCCESS"]
+DANGER = PALETTES["light"]["DANGER"]
+WARNING = PALETTES["light"]["WARNING"]
+CONSOLE_BG = PALETTES["light"]["CONSOLE_BG"]
+CONSOLE_TEXT = PALETTES["light"]["CONSOLE_TEXT"]
+TX_TEXT = PALETTES["light"]["TX_TEXT"]
+BANNER_BG = PALETTES["light"]["BANNER_BG"]
+BANNER_TEXT = PALETTES["light"]["BANNER_TEXT"]
 
 UI_FONT = '"Pretendard", "Malgun Gothic", "Segoe UI", sans-serif'
 MONO_FONT = '"Cascadia Mono", "Consolas", "D2Coding", monospace'
 
-STATE_COLORS = {
-    "connected": SUCCESS,
-    "reconnecting": WARNING,
-    "disconnected": DANGER,
+# ★색을 모듈 상수에 **값으로** 담으면 테마 교체가 먹지 않는다 (tr() 과 같은 함정) —
+#   상태→토큰 이름만 두고, 실제 색은 쓸 때 찾는다.
+STATE_TOKENS = {
+    "connected": "SUCCESS",
+    "reconnecting": "WARNING",
+    "disconnected": "DANGER",
 }
 STATE_LABELS = {
     "connected": "Connected",
@@ -37,7 +65,9 @@ STATE_LABELS = {
     "disconnected": "Disconnected",
 }
 
-QSS = f"""
+def build_qss() -> str:
+    """현재 토큰으로 QSS 를 만든다 — 테마를 바꾸면 다시 부른다."""
+    return f"""
 QWidget {{
     background: {BG};
     color: {TEXT};
@@ -134,8 +164,33 @@ QMenu {{ background: {CARD_BG}; border: 1px solid {BORDER}; border-radius: 8px; 
 QMenu::item {{ padding: 6px 22px; border-radius: 6px; }}
 QMenu::item:selected {{ background: #E8F0FE; }}
 QCheckBox {{ spacing: 6px; }}
-QToolTip {{ background: {TEXT}; color: #FFFFFF; border: none; padding: 6px 8px; }}
-"""
+QToolTip {{ background: {TEXT}; color: #FFFFFF; border: none; padding: 6px 8px; }}"""
+
+
+def state_color(state: str) -> str:
+    """상태 필 색 — 현재 팔레트에서 찾는다."""
+    return globals().get(STATE_TOKENS.get(state, "DANGER"), DANGER)
+
+
+def theme_names() -> list[str]:
+    return ["light", "dark"]
+
+
+def set_theme(name: str) -> str:
+    """팔레트를 갈아끼우고 QSS 를 다시 만든다.
+
+    UI 모듈은 전부 `from . import theme` 로 **모듈 참조**를 쓰므로(theme.BG)
+    여기서 전역을 바꾸면 그대로 따라온다. 값으로 임포트하면 안 되는 이유다.
+    """
+    global CURRENT, QSS
+    CURRENT = name if name in PALETTES else "light"
+    globals().update(PALETTES[CURRENT])
+    QSS = build_qss()
+    return CURRENT
+
+
+QSS = ""
+set_theme(CURRENT)        # 임포트 시 라이트로 한 번 채운다 (app.py 가 다시 정한다)
 
 
 def apply_theme(app) -> None:
@@ -183,7 +238,7 @@ class StatusPill(QLabel):
         if self._current == (state, text):
             return
         self._current = (state, text)
-        color = STATE_COLORS.get(state, DANGER)
+        color = state_color(state)
         label = text or STATE_LABELS.get(state, state)
         self.setText(f"● {label}")
         self.setStyleSheet(

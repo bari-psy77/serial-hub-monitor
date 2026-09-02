@@ -345,6 +345,22 @@ def save_settings(data: dict) -> None:
         pass
 
 
+THEMES = ("light", "dark")
+
+
+def theme() -> str:
+    """화면 테마 — 프로파일이 아니라 사람 설정이라 settings.json 에 둔다 (언어와 같다)."""
+    value = str(load_settings().get("theme", "light"))
+    return value if value in THEMES else "light"
+
+
+def set_theme_setting(name: str) -> str:
+    data = load_settings()
+    data["theme"] = name if name in THEMES else "light"
+    save_settings(data)
+    return data["theme"]
+
+
 def language() -> str:
     """화면 언어 — 프로파일이 아니라 **사람** 설정이라 settings.json 에 둔다.
 

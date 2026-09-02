@@ -1170,6 +1170,14 @@ def test_profile(tmp: str) -> None:
         # 화면 언어: 설정이 없으면 영어가 기본, settings.json 에 적어둔 값은 그대로 존중
         config_mod.save_settings({})
         check("언어 미지정이면 기본값은 영어", config_mod.language() == "en", config_mod.language())
+        config_mod.save_settings({})
+        check("테마 기본값은 light", config_mod.theme() == "light", config_mod.theme())
+        config_mod.set_theme_setting("dark")
+        check("테마가 settings.json 에 남는다 (종료 후 다시 켜도 유지)",
+              config_mod.theme() == "dark", config_mod.theme())
+        config_mod.save_settings({"theme": "없는테마"})
+        check("모르는 테마 값은 light 로 폴백", config_mod.theme() == "light")
+        config_mod.save_settings({})
         config_mod.save_settings({"language": "ko"})
         check("settings.json 에 명시한 언어는 기본값과 무관하게 유지된다",
               config_mod.language() == "ko", config_mod.language())
@@ -1849,6 +1857,35 @@ def test_gui(tmp: str) -> None:
     check("Qt 슬롯에서 삼켜진 예외 없음", not slot_errors, "; ".join(slot_errors[:3]))
 
 
+def test_theme() -> None:
+    print("\n== 테마 팔레트 (라이트/다크) ==")
+    from .ui import theme as theme_mod
+
+    original = theme_mod.CURRENT
+    try:
+        check("테마는 라이트/다크 2택", theme_mod.theme_names() == ["light", "dark"],
+              str(theme_mod.theme_names()))
+        theme_mod.set_theme("light")
+        light_bg, light_text = theme_mod.BG, theme_mod.CONSOLE_TEXT
+        theme_mod.set_theme("dark")
+        check("다크로 바꾸면 배경 토큰이 바뀐다",
+              theme_mod.BG != light_bg and theme_mod.CURRENT == "dark",
+              f"{light_bg} -> {theme_mod.BG}")
+        check("콘솔 본문 색도 함께 바뀐다", theme_mod.CONSOLE_TEXT != light_text)
+        check("QSS 가 새 토큰으로 다시 만들어진다", theme_mod.BG in theme_mod.build_qss(),
+              theme_mod.build_qss()[:80])
+        check("두 팔레트의 토큰 이름이 같다",
+              set(theme_mod.PALETTES["light"]) == set(theme_mod.PALETTES["dark"]),
+              str(set(theme_mod.PALETTES["light"]) ^ set(theme_mod.PALETTES["dark"])))
+        check("배너 색도 토큰으로 있다 (콘솔이 하드코딩하던 것)",
+              "BANNER_BG" in theme_mod.PALETTES["light"])
+        theme_mod.set_theme("없는테마")
+        check("모르는 이름은 light 폴백",
+              theme_mod.CURRENT == "light" and theme_mod.BG == light_bg)
+    finally:
+        theme_mod.set_theme(original)
+
+
 def test_i18n() -> None:
     """번역 누락 검사 — 새 문구를 넣고 영어 표를 안 채우면 여기서 걸린다."""
     print("\n== i18n (한국어/영어) ==")
@@ -1949,6 +1986,7 @@ def main() -> int:
         test_profile(tmp)
         test_session(tmp)
         test_i18n()
+        test_theme()
         if args.gui:
             test_gui(tmp)
     finally:
