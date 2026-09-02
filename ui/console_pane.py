@@ -380,6 +380,10 @@ class ConsolePane(QWidget):
         # 이벤트 필터를 걸어, 본문에 포커스가 있을 때만 스크롤 잠금을 푼다.
         self.view.installEventFilter(self)
         # 스크롤바가 휠을 먼저 먹어 Ctrl+휠 확대가 그 위에서만 안 먹었다 (실사용 신고)
+        # ★실제 마우스 휠은 본문이 아니라 **viewport** 에 닿는다. 거기를 안 잡으면
+        #   QPlainTextEdit 내장 확대가 그 콘솔 하나만 키운다
+        #   ("휠이 메인만 동작한다" 신고의 정체)
+        self.view.viewport().installEventFilter(self)
         self.view.verticalScrollBar().installEventFilter(self)
         self.view.horizontalScrollBar().installEventFilter(self)
         escape = QShortcut(QKeySequence("Esc"), self.search, activated=self.close_search)
@@ -454,7 +458,8 @@ class ConsolePane(QWidget):
         # ★휠은 본문(QPlainTextEdit)이 먼저 받는다 — pane 의 wheelEvent 까지
         #   올라오지 않으므로 여기서 Ctrl+휠을 가로챈다
         if event.type() == QEvent.Wheel and event.modifiers() & Qt.ControlModifier \
-                and obj in (self.view, self.view.verticalScrollBar(),
+                and obj in (self.view, self.view.viewport(),
+                            self.view.verticalScrollBar(),
                             self.view.horizontalScrollBar()):
             steps = event.angleDelta().y()
             if steps:

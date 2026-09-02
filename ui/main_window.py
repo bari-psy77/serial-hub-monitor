@@ -29,6 +29,7 @@ from ..core.filters import FilterRule
 from ..core.port import STATE_DISCONNECTED
 from ..core.session import SerialHubSession
 from . import theme
+from .wheel_zoom import WheelZoomFilter
 from .appicon import app_icon
 from .command_panel import CommandPanel
 from .console_pane import ConsolePane
@@ -94,6 +95,12 @@ class MainWindow(QMainWindow):
         self.bridge = BridgeServer(self.session, self.profile.bridge_port or 0)
         if self.profile.bridge_port:
             self.bridge.start()  # 실패해도 앱은 산다 — 칩 툴팁에 사유 표시
+
+        # Ctrl+휠은 창 어디에 떨어져도 먹어야 한다 — 위젯마다 달면 새 창에서 구멍이 난다
+        self._wheel_zoom = WheelZoomFilter(self, self.change_font, self.change_terminal_font)
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self._wheel_zoom)
 
         theme.apply_titlebar(self)     # 제목표시줄도 테마를 따라간다
         self.apply_rules()
@@ -770,13 +777,15 @@ class MainWindow(QMainWindow):
                           hide_empty=pane.hide_empty if pane else self.profile.hide_empty,
                           highlight_rules=self.profile.highlight_rules,
                           labels=self._port_labels())
-        view.pane.set_font_size(self.profile.console_font_size)
         view.pane.zoom_requested.connect(self.change_font)
         view.pane.set_word_wrap(self.profile.word_wrap)
         view.pane.set_ansi_color(self.profile.ansi_color)
         view.closed.connect(self._on_filter_closed)
         self.filter_views.append(view)
         self._add_bottom_dock(view)
+        # ★폰트는 붙여서 보인 **뒤에** 건다 — show 때 도는 polish 가 QSS 폰트(13px)로
+        #   덮어써서, 새로 연 창만 다른 크기로 뜨고 있었다 (실사용 신고)
+        view.pane.set_font_size(self.profile.console_font_size)
         view.edit.setFocus()
 
     def _on_filter_closed(self, view: FilterView) -> None:
@@ -916,6 +925,8 @@ class MainWindow(QMainWindow):
                 theme.apply_titlebar(window)
             for dock in [*self.viewer_docks, *self.terminal_docks,
                          *self.filter_views]:
+                # 스타일이 바뀌면 Qt 가 제목줄 아이콘을 자기 것으로 되돌린다 — 다시 칠한다
+                theme.refresh_dock_buttons(dock)
                 if dock.isFloating():
                     theme.apply_titlebar(dock)
             config_mod.set_theme_setting(applied)
@@ -1158,6 +1169,8 @@ class MainWindow(QMainWindow):
         dock.setFloating(False)   # 열 때마다 떠 있던 문제 — 항상 도킹 상태로 시작
         dock.show()
         dock.raise_()
+        # X·분리 아이콘을 테마 글자색으로 — 기본 아이콘은 다크 제목줄에 묻힌다
+        theme.refresh_dock_buttons(dock)
 
     def _drop_dock(self, dock) -> None:
         """닫힌 도크를 창에서 완전히 떼어낸다 — 안 하면 빈 도크 영역이 자리를 물고 있다."""

@@ -6,7 +6,7 @@
 
 ## 현재까지 진행 사항
 
-- **테스트 실측(2026-09-01)**: `python selftest.py` → **237 passed**, `python selftest.py --gui` → **324 passed**, `python uitest.py` → **166 passed**. 합계 490건 전부 통과(`--gui` 는 core 를 포함하므로 324+166 로 센다). `ruff check . --select E,F,W,B,ARG --line-length 110` 클린.
+- **테스트 실측(2026-09-02)**: `python selftest.py` → **275 passed**, `python selftest.py --gui` → **403 passed**, `python uitest.py` → **179 passed**. 합계 582건 전부 통과(`--gui` 는 core 를 포함하므로 403+179 로 센다). `ruff check . --select E,F,W,B,ARG --line-length 110` 클린.
 - **배포 완료(2026-09-01)**: GitHub 릴리스 **`v1.4.0`** 에 설치본(`SerialHub_Setup_1.4.0.exe`, 35MB)과 포터블 zip(`SerialHub_20260901.zip`, 49MB)을 올렸다. `publish_release.py` 가 이 버전 설치본 + 가장 최신 zip 을 골라 올리고 **옛 릴리스는 지운다**(최신 하나만 유지). 산출물은 저장소에 넣지 않는다(`dist/` 는 gitignore). 인증은 GitHub CLI 또는 `GH_TOKEN` 1회용 토큰이고, 올리기 전에 **어느 계정으로 올리는지 출력**한다 — 이 벤치는 다른 회사 계정도 함께 쓰기 때문이다. README 2종의 다운로드 안내도 릴리스 페이지로 바꿨다.
 - **1.4.0 신기능** (자세한 내역은 `CHANGELOG.md`):
   - **로그 저장 위치 옵션** — 날짜별(MMDD) 하위 폴더는 이제 선택이고 **기본은 로그 폴더에 바로 저장**. `LogStore.set_use_date_folder()` + 프로파일 `log_use_date_folder`.

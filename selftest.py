@@ -1244,6 +1244,7 @@ def test_gui(tmp: str) -> None:
     print("\n== GUI (offscreen) ==")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtCore import Qt
+    from PySide6.QtGui import QColor
     from PySide6.QtWidgets import QApplication, QComboBox
 
     from .core import ansi as ansi_mod
@@ -1385,6 +1386,34 @@ def test_gui(tmp: str) -> None:
           rules_combo is not None
           and filters_mod.highlight_hex(rules_combo.currentData()) in rules_combo.styleSheet(),
           rules_combo.styleSheet()[:60] if rules_combo else "(콤보 없음)")
+    # ★도크 제목줄의 X·분리 아이콘은 스타일이 주는 어두운 비트맵이라 QSS 로 색을
+    #   못 바꾼다 — 다크에서 묻혀 안 보였다 (실사용 신고). 팔레트 색으로 직접 그린다
+    icon = theme_mod.dock_button_icon("close", "#FF3B30")
+    icon_image = icon.pixmap(14, 14).toImage()
+    check("도크 버튼 아이콘을 지정한 색으로 그린다",
+          not icon.isNull() and any(
+              icon_image.pixelColor(x, y).alpha() > 200
+              and icon_image.pixelColor(x, y).red() > 200
+              and icon_image.pixelColor(x, y).green() < 90
+              for x in range(icon_image.width()) for y in range(icon_image.height())))
+    check("분리 버튼 아이콘도 그린다",
+          not theme_mod.dock_button_icon("float", "#FF3B30").isNull())
+    window.open_filter_view(FR(pattern="line 12", ports=["MLOG"]))
+    pump(app)
+    dock_close = theme_mod.dock_button(window.filter_views[-1], "close")
+    dock_image = (dock_close.icon().pixmap(14, 14).toImage()
+                  if dock_close is not None else None)
+    dark_text = QColor(theme_mod.TEXT)
+    check("도크 X 버튼이 다크 글자색으로 다시 칠해진다 (하단 도킹 시 안 보이던 문제)",
+          dock_image is not None and any(
+              dock_image.pixelColor(x, y).alpha() > 200
+              and abs(dock_image.pixelColor(x, y).red() - dark_text.red()) < 40
+              and abs(dock_image.pixelColor(x, y).blue() - dark_text.blue()) < 40
+              for x in range(dock_image.width()) for y in range(dock_image.height())),
+          "(버튼 없음)" if dock_close is None else "아이콘 색 불일치")
+    window.filter_views[-1].close()      # 뒤 테스트가 도크 잔여를 검사한다
+    pump(app)
+
     check("설정에 저장된다 (종료 후 다시 켜도 다크)", config_mod.theme() == "dark",
           config_mod.theme())
     check("전환 후에도 tick 이 예외 없이 돈다", window.tick() is None)
@@ -1447,12 +1476,46 @@ def test_gui(tmp: str) -> None:
     _wheel_on(mlog_pane.view, -120, Qt.KeyboardModifier.ControlModifier)
     check("Ctrl+휠 아래로 = 글자 작아진다", profile.console_font_size == before,
           str(profile.console_font_size))
+    # ★실제 마우스는 본문(view)이 아니라 그 안의 viewport 에 닿는다. 거기서 우리 확대가
+    #   안 걸리면 Qt 내장 확대가 그 콘솔 하나만 키운다 — "휠이 메인만 동작" 신고의 정체
+    before_vp = profile.console_font_size
+    _wheel_on(mlog_pane.view.viewport(), 120, Qt.KeyboardModifier.ControlModifier)
+    check("viewport 에서도 Ctrl+휠이 전 콘솔 공통으로 먹는다",
+          profile.console_font_size == before_vp + 1,
+          f"{before_vp} -> {profile.console_font_size}")
+    check("다른 콘솔도 같이 커진다 (Qt 내장 확대가 아니라 우리 경로)",
+          window.panes["SHELL"].font_size() == profile.console_font_size)
+    _wheel_on(mlog_pane.view.viewport(), -120, Qt.KeyboardModifier.ControlModifier)
+
     before_bar = profile.console_font_size
     _wheel_on(mlog_pane.view.verticalScrollBar(), 120, Qt.KeyboardModifier.ControlModifier)
     check("스크롤바 위에서도 Ctrl+휠이 먹는다 (실사용 신고 — 안 먹던 자리)",
           profile.console_font_size == before_bar + 1,
           f"{before_bar} -> {profile.console_font_size}")
     _wheel_on(mlog_pane.view.verticalScrollBar(), -120, Qt.KeyboardModifier.ControlModifier)
+
+    # ★"창이 생기고 처음 휠이 안 된다" (실사용 신고) — 갓 만든 창에서 커서가
+    #   본문 위에 있으리라는 보장이 없다. 콘솔 창 안이면 **어디에 떨어져도** 먹어야 한다
+    window.open_filter_view(FR(pattern="line 12", ports=["MLOG"]))
+    pump(app)
+    fresh = window.filter_views[-1]
+    # ★창을 붙이고 보이는 순간 QSS polish 가 폰트를 덮는다 — 새 창만 딴 크기로 뜬다
+    check("갓 만든 창의 글자 크기가 나머지와 같다",
+          fresh.pane.font_size() == profile.console_font_size,
+          f"{fresh.pane.font_size()} vs {profile.console_font_size}")
+    before_new = profile.console_font_size
+    _wheel_on(fresh.edit, 120, Qt.KeyboardModifier.ControlModifier)
+    check("갓 만든 필터드뷰는 입력칸 위에서도 Ctrl+휠이 먹는다",
+          profile.console_font_size == before_new + 1,
+          f"{before_new} -> {profile.console_font_size}")
+    check("그 새 창의 콘솔에도 반영된다",
+          fresh.pane.font_size() == profile.console_font_size,
+          f"{fresh.pane.font_size()} vs {profile.console_font_size}")
+    _wheel_on(fresh.pane.title_label, -120, Qt.KeyboardModifier.ControlModifier)
+    check("제목줄 쪽에서도 먹는다", profile.console_font_size == before_new,
+          str(profile.console_font_size))
+    fresh.close()
+    pump(app)
 
     _wheel_on(mlog_pane.view, 120, Qt.KeyboardModifier.NoModifier)
     check("Ctrl 없이는 폰트가 안 바뀐다 (평소 스크롤)",
@@ -1699,6 +1762,17 @@ def test_gui(tmp: str) -> None:
         check("도크 이름이 서로 다르다 (배치 기억이 꼬이지 않게)",
               first_dock.objectName() != second_dock.objectName(),
               f"{first_dock.objectName()} vs {second_dock.objectName()}")
+
+        # 새 창의 글자 크기 — 붙여서 보인 뒤에 걸어야 QSS polish 에 안 덮인다
+        check("갓 만든 터미널 글자 크기가 설정값과 같다",
+              second_dock.pane.font_size() == profile.terminal_font_size,
+              f"{second_dock.pane.font_size()} vs {profile.terminal_font_size}")
+        term_before = profile.terminal_font_size
+        _wheel_on(second_dock, 120, Qt.KeyboardModifier.ControlModifier)
+        check("터미널 도크는 본문 밖에서도 Ctrl+휠이 먹는다",
+              profile.terminal_font_size == term_before + 1,
+              f"{term_before} -> {profile.terminal_font_size}")
+        _wheel_on(second_dock, -120, Qt.KeyboardModifier.ControlModifier)
 
         # 창을 키우는 길 — ★네이티브 프레임에 최대화 버튼을 붙이면(창 플래그 교체)
         # 실제 버튼 클릭 때 Qt 가 도크를 파괴한다 (실기 재현). 우리 버튼으로 처리한다.

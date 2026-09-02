@@ -8,6 +8,7 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from ..core import ansi
 from ..core import filters
 from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton,
@@ -191,8 +192,90 @@ QMenuBar::item:selected {{ background: #E5E8EB; border-radius: 6px; }}
 QMenu {{ background: {CARD_BG}; border: 1px solid {BORDER}; border-radius: 8px; padding: 4px; }}
 QMenu::item {{ padding: 6px 22px; border-radius: 6px; }}
 QMenu::item:selected {{ background: {SELECTION_BG}; color: {SELECTION_TEXT}; }}
+
+/* 도크 제목줄 — 기본 스타일은 아이콘이 어두워 다크에서 X·분리 버튼이 묻힌다 (실사용 신고).
+   버튼을 카드색 사각형으로 깔고 hover 때 강조해 어느 테마에서도 눈에 띄게 한다. */
+QDockWidget {{ color: {TEXT}; }}
+QDockWidget::title {{
+    background: {CARD_BG};
+    color: {TEXT};
+    padding: 6px 10px;
+    border: 1px solid {BORDER};
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}}
+QDockWidget::close-button, QDockWidget::float-button {{
+    background: {SOFT_BG};
+    border: 1px solid {BORDER};
+    border-radius: 5px;
+    width: 18px; height: 18px;
+    icon-size: 14px;
+    subcontrol-position: top right;
+    subcontrol-origin: margin;
+}}
+QDockWidget::close-button {{ right: 6px; top: 4px; }}
+QDockWidget::float-button {{ right: 30px; top: 4px; }}
+QDockWidget::close-button:hover, QDockWidget::float-button:hover {{
+    background: {PRIMARY}; border-color: {PRIMARY};
+}}
 QCheckBox {{ spacing: 6px; }}
 QToolTip {{ background: {TEXT}; color: #FFFFFF; border: none; padding: 6px 8px; }}"""
+
+
+def dock_button_icon(kind: str, color: str) -> QIcon:
+    """도크 제목줄의 X·분리 아이콘을 주어진 색으로 직접 그린다.
+
+    ★기본 아이콘은 스타일이 주는 어두운 비트맵이고 QSS 로는 색을 못 바꾼다
+    (`titlebar-close-icon` 은 이미지 교체만 된다). 다크에서 어두운 제목줄에
+    어두운 아이콘이 얹혀 안 보였다 — 하단 도킹 시 특히 (실사용 신고).
+    """
+    size = 14
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    pen = QPen(QColor(color))
+    pen.setWidthF(1.6)
+    pen.setCapStyle(Qt.RoundCap)
+    painter.setPen(pen)
+    if kind == "close":
+        painter.drawLine(4, 4, 10, 10)
+        painter.drawLine(10, 4, 4, 10)
+    else:                                   # 분리 — 창을 떼어내는 모양
+        painter.drawRect(2, 5, 7, 7)
+        painter.drawLine(5, 2, 12, 2)
+        painter.drawLine(12, 2, 12, 9)
+    painter.end()
+    return QIcon(pixmap)
+
+
+# 도크 내부 버튼은 이름으로만 잡힌다 (findChildren(QAbstractButton) 으로는 안 나온다)
+_DOCK_BUTTONS = (("qt_dockwidget_closebutton", "close"),
+                 ("qt_dockwidget_floatbutton", "float"))
+
+
+def dock_button(dock, kind: str):
+    """도크 제목줄의 X(close)·분리(float) 버튼.
+
+    ★findChild(QWidget, 이름) 으로는 안 잡힌다 — Qt 내부 전용 타입이라 파이썬
+    래퍼가 QWidget 으로 매칭되지 않는다. 직계 자식을 이름으로 훑는다.
+    """
+    name = dict((k, n) for n, k in _DOCK_BUTTONS).get(kind)
+    for child in dock.children():
+        if child.objectName() == name and hasattr(child, "setIcon"):
+            return child
+    return None
+
+
+def refresh_dock_buttons(dock) -> None:
+    """도크의 X·분리 버튼을 현재 테마 글자색으로 다시 칠한다.
+
+    스타일이 바뀌면 Qt 가 자기 아이콘으로 되돌리므로, 테마 전환 뒤에도 불러야 한다.
+    """
+    for _name, kind in _DOCK_BUTTONS:
+        button = dock_button(dock, kind)
+        if button is not None:
+            button.setIcon(dock_button_icon(kind, TEXT))
 
 
 def apply_titlebar(widget) -> None:
