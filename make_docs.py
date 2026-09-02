@@ -597,6 +597,10 @@ treat the whole file as binary and refuse to open it. So it is written as
 <h3>펌웨어 로그 색</h3>
 <p>장치가 보낸 ANSI 색을 화면에 그대로 살린다(보기 → 펌웨어 로그 색 표시로 끌 수 있음).
 <b>로그 파일에는 색 코드가 들어가지 않는다</b> — grep·첨부는 깨끗한 본문 그대로다.</p>
+<h3>글자 크기</h3>
+<p><kbd>Ctrl</kbd>+<kbd>=</kbd> / <kbd>-</kbd> / <kbd>0</kbd> 또는 <b><kbd>Ctrl</kbd>+마우스
+휠</b>. 어느 창에서 돌리든 <b>모든 콘솔·병합 뷰·필터드뷰·로그 뷰어가 함께</b> 바뀌고 크기는
+프로파일에 저장된다. (내장 터미널은 글자 격자로 그리기 때문에 터미널끼리 별도 크기를 쓴다.)</p>
 <h3>콘솔 헤더 버튼</h3>
 <table><tr><th>버튼</th><th>기능</th></tr>
 <tr><td><code>시각</code></td><td>타임스탬프 절대 → 상대 → 끔 (<kbd>Ctrl</kbd>+<kbd>T</kbd>)</td></tr>
@@ -618,6 +622,11 @@ on the next run.</p>
 <p>ANSI colors sent by the device are rendered on screen as-is (turn off via View → Show
 firmware log colors). <b>Color codes never go into the log files</b> — greps and
 attachments get clean text.</p>
+<h3>Text size</h3>
+<p><kbd>Ctrl</kbd>+<kbd>=</kbd> / <kbd>-</kbd> / <kbd>0</kbd>, or <b><kbd>Ctrl</kbd>+mouse
+wheel</b>. Whichever pane you scroll on, <b>every console, the merged view, filtered views
+and the log viewer</b> resize together, and the size is saved in the profile. (The embedded
+terminal draws on a character grid, so terminals share a size of their own.)</p>
 <h3>Console header buttons</h3>
 <table><tr><th>Button</th><th>Function</th></tr>
 <tr><td><code>time</code></td><td>Timestamps: absolute → relative → off
@@ -823,6 +832,52 @@ sent, a "check the target port" warning appears (catches sending a SHELL command
 immediately)</li>
 </ul>""")
 
+    section("포트 연결 — 상태 필의 토글 버튼", f"""
+{img('monitor', '상단 상태 필 — 이름 옆의 버튼으로 그 포트만 연결/해제한다')}
+<p>화면 맨 위의 상태 필은 포트마다 <b>연결 상태</b>(초록 Connected / 노랑 Reconnecting /
+빨강 Disconnected)와 이름·COM 을 보여준다.</p>
+<ul>
+<li>필 오른쪽의 <b>🔌 버튼</b>으로 그 포트만 <b>연결/해제</b>한다 — 설정 창을 열 필요가 없다</li>
+<li><b>필 본체를 클릭하면</b> 해당 콘솔로 이동한다(연결은 건드리지 않는다). 필 전체를 토글로
+만들지 않은 이유다 — 콘솔을 보려다 시험 중인 포트를 끊으면 그 구간 로그가 사라진다</li>
+<li>기록 중에 해제하면 <b>이 포트 로그가 거기서 끊긴다</b>고 상태줄이 알려준다</li>
+</ul>""",
+            "Connecting a port — the toggle on each status pill", f"""
+{img('monitor', 'Status pills at the top — the plug button connects or disconnects that port')}
+<p>Each status pill shows one port's <b>connection state</b> (green Connected, amber
+Reconnecting, red Disconnected) with its name and COM number.</p>
+<ul>
+<li>The <b>plug button</b> beside a pill connects or disconnects <b>that port</b> without
+opening the settings dialog</li>
+<li><b>Clicking the pill itself</b> jumps to that console and leaves the connection alone.
+The split is deliberate: a pill-wide toggle would cost a stretch of log every time someone
+reaches for the console mid-test</li>
+<li>Disconnecting while recording says so in the status bar — that port's log stops there</li>
+</ul>""")
+
+    section("화면 테마 — 라이트 / 다크", """
+<p><b>[설정 → 일반 → 화면 테마]</b> 에서 <b>라이트</b>와 <b>다크</b>를 고른다.
+<b>고르는 즉시 적용</b>되고(언어와 달리 다시 켤 필요가 없다), 선택은 사람 설정으로 저장돼
+다음에 켤 때도 그대로다.</p>
+<ul>
+<li>UI 뿐 아니라 <b>로그 본문의 펌웨어 ANSI 색·하이라이트 색·내장 터미널</b>까지 함께 바뀐다</li>
+<li>하이라이트 <b>색 이름</b>(빨강·노랑…)은 그대로다 — 프로파일에 저장되는 값이라 테마를
+바꿔도 설정이 깨지지 않는다</li>
+<li>전환할 때 화면 전체를 다시 칠하므로 콘솔에 로그가 아주 많으면 1초 안팎 멈춘다</li>
+</ul>""",
+            "Appearance — light and dark", """
+<p>Pick <b>Light</b> or <b>Dark</b> under <b>[Settings → General → Appearance]</b>. It
+applies <b>immediately</b> (unlike the language, which waits for a restart) and is
+remembered for the next launch.</p>
+<ul>
+<li>The firmware ANSI colors in the log body, the highlight colors and the embedded
+terminal all follow the theme, not just the window chrome</li>
+<li>Highlight <b>color names</b> stay the same, because they are what profiles store —
+switching themes never invalidates a saved profile</li>
+<li>Switching repaints everything, so a console holding a very long scrollback pauses for
+about a second</li>
+</ul>""")
+
     section("언어 — 한국어 / English", """
 <p>기본은 English 다. <b>[설정 → 일반]</b> 에서 한국어로 바꿀 수 있다.</p>
 <ul>
@@ -949,7 +1004,8 @@ stretch. <b>The log files have everything</b></td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>로그 기록 시작 / 중지</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>기록 멈춤 / 재개</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>콘솔 창 분리 / 복귀</td></tr>
-<tr><td><kbd>Ctrl</kbd>+<kbd>=</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>글자 크기</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>=</kbd> <kbd>-</kbd> <kbd>0</kbd> ·
+<kbd>Ctrl</kbd>+마우스 휠</td><td>글자 크기 (전 콘솔 공통)</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>프로파일 저장</td></tr>
 <tr><td><kbd>F1</kbd></td><td>이 사용 설명서</td></tr></table>
 <p style="margin-top:22px;color:#8b95a1;font-size:13px">Serial Hub · Copyright © psy-bari</p>""",
@@ -971,7 +1027,8 @@ bottom</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Start / stop log recording</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Pause / resume recording</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Pop console out / dock back</td></tr>
-<tr><td><kbd>Ctrl</kbd>+<kbd>=</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>Text size</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>=</kbd> <kbd>-</kbd> <kbd>0</kbd> ·
+<kbd>Ctrl</kbd>+wheel</td><td>Text size (shared by all consoles)</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save profile</td></tr>
 <tr><td><kbd>F1</kbd></td><td>This user guide</td></tr></table>
 <p style="margin-top:22px;color:#8b95a1;font-size:13px">Serial Hub · Copyright © psy-bari</p>""")

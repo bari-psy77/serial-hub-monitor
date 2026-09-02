@@ -10,7 +10,7 @@ a PowerShell terminal inside the same window.
 
 ## Installation (recommended)
 
-Download `SerialHub_Setup_1.5.0.exe` from the [releases page](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) and run it to
+Download `SerialHub_Setup_1.6.0.exe` from the [releases page](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) and run it to
 start the setup wizard (only the latest build is kept there). No Python required,
 and **no administrator rights required** (per-user install is the default).
 
@@ -28,7 +28,7 @@ extra icons → summary → install → finish (with optional install check and 
 Unattended deployment:
 
 ```
-SerialHub_Setup_1.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
+SerialHub_Setup_1.6.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
 unins000.exe /VERYSILENT /SUPPRESSMSGBOXES          # uninstall (settings are kept)
 ```
 
@@ -245,6 +245,15 @@ for a separate window and use the ⛶ button in the toolbar to maximize or resto
 shell cannot be embedded, so the [Admin PowerShell (external window)] button
 launches an elevated window separately. The terminal screen is never written to
 the serial log files.
+
+## Appearance (light / dark)
+
+Pick the theme under **[Settings → General → Appearance]**. It applies immediately
+(unlike the language, which waits for a restart) and is remembered in
+`settings.json` for the next launch. The ANSI colors in the log body, the
+highlight colors and the embedded terminal follow the theme too — not just the
+window chrome. Highlight color *names* stay the same, so switching themes never
+invalidates a saved profile.
 
 ## Language (한국어 / English)
 

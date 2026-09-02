@@ -9,7 +9,7 @@ VS Code Serial Monitor + Tera Term + MobaXterm 세 툴을 하나로 대체한다
 
 ## 설치 (권장)
 
-[릴리스 페이지](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) 에서 `SerialHub_Setup_1.5.0.exe` 를 받아 실행하면 설치
+[릴리스 페이지](https://github.com/bari-psy77/serial-hub-monitor/releases/latest) 에서 `SerialHub_Setup_1.6.0.exe` 를 받아 실행하면 설치
 마법사가 뜬다 (항상 최신 버전 하나만 올려 둔다). Python 을 깔
 필요가 없고, **관리자 권한도 필요 없다**(기본이 사용자 단위 설치).
 
@@ -25,7 +25,7 @@ VS Code Serial Monitor + Tera Term + MobaXterm 세 툴을 하나로 대체한다
 무인 배포:
 
 ```
-SerialHub_Setup_1.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
+SerialHub_Setup_1.6.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="D:\Tools\SerialHub"
 unins000.exe /VERYSILENT /SUPPRESSMSGBOXES          # 제거 (설정은 보존)
 ```
 
@@ -214,6 +214,13 @@ MMDD 폴더로, 껐으면 파일명에 날짜를 붙여서).
 닫으면 셸 프로세스도 함께 끝난다. **관리자 모드**는 UAC 경계 때문에 임베드가
 불가능해 [관리자 PowerShell (외부 창)] 버튼이 승격된 창을 따로 띄운다. 터미널 화면은
 시리얼 로그 파일에 기록되지 않는다.
+
+## 화면 테마 (라이트 / 다크)
+
+**[설정 → 일반 → 화면 테마]** 에서 고른다. **고르는 즉시 적용**되고(언어와 달리 재시작이
+필요 없다), 선택은 `settings.json` 에 남아 다음에 켤 때도 그대로다. UI 뿐 아니라 **로그
+본문의 ANSI 색·하이라이트·내장 터미널**까지 함께 바뀐다. 하이라이트 **색 이름**은 그대로라
+테마를 바꿔도 프로파일이 깨지지 않는다.
 
 ## 언어 (한국어 / English)
 
