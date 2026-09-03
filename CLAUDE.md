@@ -16,7 +16,7 @@ python app.py --demo          # 포트 없이 화면 확인 (합성 로그)
 python app.py --selfcheck     # 빌드/환경 점검 (COM 열거·Qt·쓰기 경로)
 
 # 검증 — 수정 후 반드시 셋 다
-python selftest.py --gui      # 단위 + offscreen GUI (~403)
+python selftest.py --gui      # 단위 + offscreen GUI (~419)
 python uitest.py              # 가상 3콘솔 사용자 시나리오 (~179)
 python -m ruff check . --select E,F,W,B,ARG --line-length 110
 
@@ -109,7 +109,12 @@ python build_installer.py     # Inno Setup 설치본 → dist/
   교체 전용, `url(none)` 은 아이콘을 지운다). `theme.dock_button_icon()` 으로 팔레트 색을
   직접 그려 넣고, 스타일이 바뀌면 Qt 가 되돌리므로 테마 전환 뒤 다시 칠한다.
 - 상태필/REC 버튼처럼 50ms 마다 갱신되는 것은 값이 같으면 `setStyleSheet` 를 건너뛴다
-  (repolish 비용).
+  (repolish 비용). ★대신 **테마를 바꾸면 그 캐시를 비워야 한다** — 안 그러면 옛 팔레트
+  색이 그대로 굳는다(라이트로 돌아와도 어두운 필). 이미 발라 둔 색은 `theme.retone()`
+  으로 같은 자리의 새 색으로 옮긴다.
+- **다크 QSS 에 색을 직접 쓰지 말 것.** 하나만 밝은 값이어도 흰 덩어리가 된다(메뉴 hover
+  실사용 신고). selftest 가 **다크 QSS 의 모든 hex 가 다크 팔레트 값인지** 검사한다.
+  상태색을 틴트 위에 얹을 때는 `theme.readable()` 로 대비 4.5 를 맞춘다.
 
 ## 테스트 작성 규칙
 

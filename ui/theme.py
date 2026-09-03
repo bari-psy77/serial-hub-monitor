@@ -28,6 +28,8 @@ PALETTES = {
         "SELECTION_BG": "#CFE3FF", "SELECTION_TEXT": "#191F28",
         "TINT_SUCCESS": "#E7F9F1", "TINT_WARNING": "#FFF6E5",
         "TINT_DANGER": "#FEECEE", "TINT_PRIMARY": "#E8F0FE", "TINT_NEUTRAL": "#F2F4F6",
+        "MENU_HOVER_BG": "#E5E8EB", "SCROLL_HANDLE": "#D1D6DB",
+        "TOOLTIP_BG": "#191F28", "TOOLTIP_TEXT": "#FFFFFF",
     },
     # 어두운 화면 — 콘솔 본문까지 함께 바뀐다
     "dark": {
@@ -42,6 +44,8 @@ PALETTES = {
         "SELECTION_BG": "#2C5480", "SELECTION_TEXT": "#FFFFFF",
         "TINT_SUCCESS": "#17372A", "TINT_WARNING": "#3B3115",
         "TINT_DANGER": "#3E1F22", "TINT_PRIMARY": "#22375C", "TINT_NEUTRAL": "#272B33",
+        "MENU_HOVER_BG": "#343B47", "SCROLL_HANDLE": "#4A5260",
+        "TOOLTIP_BG": "#343B47", "TOOLTIP_TEXT": "#F2F5FA",
     },
 }
 CURRENT = "light"
@@ -75,6 +79,10 @@ TINT_WARNING = PALETTES["light"]["TINT_WARNING"]
 TINT_DANGER = PALETTES["light"]["TINT_DANGER"]
 TINT_PRIMARY = PALETTES["light"]["TINT_PRIMARY"]
 TINT_NEUTRAL = PALETTES["light"]["TINT_NEUTRAL"]
+MENU_HOVER_BG = PALETTES["light"]["MENU_HOVER_BG"]
+SCROLL_HANDLE = PALETTES["light"]["SCROLL_HANDLE"]
+TOOLTIP_BG = PALETTES["light"]["TOOLTIP_BG"]
+TOOLTIP_TEXT = PALETTES["light"]["TOOLTIP_TEXT"]
 
 UI_FONT = '"Pretendard", "Malgun Gothic", "Segoe UI", sans-serif'
 MONO_FONT = '"Cascadia Mono", "Consolas", "D2Coding", monospace'
@@ -138,7 +146,7 @@ QPushButton#segment {{
     border: none; background: transparent; color: {TEXT_SUB};
     padding: 8px 26px; border-radius: 9px; font-weight: 700;
 }}
-QPushButton#segment:checked {{ background: #E5E8EB; color: {TEXT}; }}
+QPushButton#segment:checked {{ background: {MENU_HOVER_BG}; color: {TEXT}; }}
 
 QLineEdit, QComboBox, QSpinBox {{
     background: {CARD_BG}; border: 1px solid {BORDER};
@@ -181,14 +189,14 @@ QTableWidget::item:selected {{ background: {SELECTION_BG}; color: {SELECTION_TEX
 
 QSplitter::handle {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
-QScrollBar::handle:vertical {{ background: #D1D6DB; border-radius: 5px; min-height: 30px; }}
+QScrollBar::handle:vertical {{ background: {SCROLL_HANDLE}; border-radius: 5px; min-height: 30px; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 2px; }}
-QScrollBar::handle:horizontal {{ background: #D1D6DB; border-radius: 5px; min-width: 30px; }}
+QScrollBar::handle:horizontal {{ background: {SCROLL_HANDLE}; border-radius: 5px; min-width: 30px; }}
 
 QStatusBar {{ background: {BG}; color: {TEXT_SUB}; }}
 QMenuBar {{ background: {BG}; }}
-QMenuBar::item:selected {{ background: #E5E8EB; border-radius: 6px; }}
+QMenuBar::item:selected {{ background: {MENU_HOVER_BG}; color: {TEXT}; border-radius: 6px; }}
 QMenu {{ background: {CARD_BG}; border: 1px solid {BORDER}; border-radius: 8px; padding: 4px; }}
 QMenu::item {{ padding: 6px 22px; border-radius: 6px; }}
 QMenu::item:selected {{ background: {SELECTION_BG}; color: {SELECTION_TEXT}; }}
@@ -219,7 +227,9 @@ QDockWidget::close-button:hover, QDockWidget::float-button:hover {{
     background: {PRIMARY}; border-color: {PRIMARY};
 }}
 QCheckBox {{ spacing: 6px; }}
-QToolTip {{ background: {TEXT}; color: #FFFFFF; border: none; padding: 6px 8px; }}"""
+/* 다크에서 배경이 TEXT(거의 흰색)라 글씨가 안 보였다 (실사용 신고) — 전용 토큰 */
+QToolTip {{ background: {TOOLTIP_BG}; color: {TOOLTIP_TEXT};
+    border: 1px solid {BORDER}; border-radius: 6px; padding: 6px 8px; }}"""
 
 
 def dock_button_icon(kind: str, color: str) -> QIcon:
@@ -380,8 +390,85 @@ class StatusPill(QLabel):
         label = text or STATE_LABELS.get(state, state)
         self.setText(f"● {label}")
         self.setStyleSheet(
-            f"QLabel {{ background: {pill_tint(color)}; color: {color}; "
+            f"QLabel {{ background: {pill_tint(color)}; color: {pill_text(state)}; "
             f"border-radius: 12px; padding: 4px 12px; font-weight: 700; }}")
+
+    def state(self) -> str:
+        return self._current[0] if self._current else "disconnected"
+
+    def refresh_theme(self) -> None:
+        """테마가 바뀌면 다시 칠한다.
+
+        ★값이 같으면 건너뛰는 최적화 때문에, 상태가 그대로면 **옛 테마 색이 그대로
+        굳어 있었다** — 라이트로 돌아와도 어두운 필이 남았다 (실사용 신고).
+        """
+        state, text = self._current or ("disconnected", "")
+        self._current = None
+        self.set_state(state, text)
+
+
+def retone(hex_color: str) -> str:
+    """다른 테마 팔레트의 색을 **지금 테마의 같은 자리** 색으로 옮긴다.
+
+    50ms 마다 도는 갱신들은 값이 같으면 `setStyleSheet` 를 건너뛴다(repolish 비용).
+    그래서 테마를 바꿔도 인라인으로 발라 둔 옛 색이 그대로 굳는다 — REC 버튼·트리거
+    칩·연결 카드 상태 문구가 그랬다. 팔레트에 없는 색은 건드리지 않는다.
+    """
+    wanted = hex_color.upper()
+    for palette in PALETTES.values():
+        for token, value in palette.items():
+            if value.upper() == wanted:
+                return PALETTES[CURRENT][token]
+    return hex_color
+
+
+def _luminance(hex_color: str) -> float:
+    """WCAG 상대 휘도 — 대비비 계산용."""
+    color = QColor(hex_color)
+    channels = []
+    for value in (color.redF(), color.greenF(), color.blueF()):
+        channels.append(value / 12.92 if value <= 0.03928
+                        else ((value + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+
+def contrast_ratio(fore: str, back: str) -> float:
+    """두 색의 WCAG 대비비 (1~21). 눈대중 대신 이 값으로 잠근다."""
+    first, second = _luminance(fore), _luminance(back)
+    lighter, darker = max(first, second), min(first, second)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def readable(color: str, background: str, minimum: float = 4.5) -> str:
+    """배경 위에서 읽히도록 색의 밝기만 조정한다 (색상은 유지).
+
+    상태색을 그대로 옅은 틴트 위에 얹으면 초록/노랑이 묻힌다 — 실사용 신고
+    "connect 관련 버튼 색이 시안성이 안 좋다" 가 그것이다.
+    """
+    if contrast_ratio(color, background) >= minimum:
+        return color
+    target = QColor(color)
+    hue, sat, light, alpha = target.getHslF()
+    darken = _luminance(background) > 0.18      # 밝은 배경이면 글씨를 어둡게
+    step = -0.02 if darken else 0.02
+    best, best_ratio = color, contrast_ratio(color, background)
+    for _ in range(50):
+        light = min(1.0, max(0.0, light + step))
+        candidate = QColor.fromHslF(hue, sat, light, alpha).name().upper()
+        ratio = contrast_ratio(candidate, background)
+        if ratio > best_ratio:
+            best, best_ratio = candidate, ratio
+        if ratio >= minimum:
+            return candidate
+        if light in (0.0, 1.0):
+            break
+    return best
+
+
+def pill_text(state: str) -> str:
+    """상태 필 글자색 — 틴트 배경 위에서 읽히는 톤으로 낮춘다/올린다."""
+    color = state_color(state)
+    return readable(color, pill_tint(color))
 
 
 def pill_tint(hex_color: str) -> str:

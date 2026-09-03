@@ -8,6 +8,7 @@ __pycache__/
 
 # 실행 중 생기는 파일 (로그·점검 결과·사용자 프로파일·설정)
 *.log
+*.log.*
 selfcheck.txt
 where.txt
 portable.txt

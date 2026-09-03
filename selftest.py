@@ -1250,6 +1250,7 @@ def test_gui(tmp: str) -> None:
     from .core import ansi as ansi_mod
     from .core import filters as filters_mod
     from .core.filters import FilterRule as FR
+    from .core.filters import TriggerRule
     from .ui import theme
     from .ui.main_window import MainWindow
 
@@ -1414,6 +1415,49 @@ def test_gui(tmp: str) -> None:
     window.filter_views[-1].close()      # 뒤 테스트가 도크 잔여를 검사한다
     pump(app)
 
+    # ★50ms 캐시(값이 같으면 setStyleSheet 생략) 때문에 옛 테마 색이 굳는 자리들
+    store.set_paused(True)
+    window.tick()
+    window.apply_theme_change("light")
+    window.apply_theme_change("dark")
+    window.tick()
+    check("기록 멈춤 버튼 색도 테마를 따라온다",
+          theme_mod.WARNING in window.rec_button.styleSheet(),
+          window.rec_button.styleSheet()[:70])
+    store.set_paused(False)
+    # 실제 트리거가 잡힌 상태를 만든다 (칩이 경고색으로 칠해지는 조건)
+    window.trigger_watcher.set_rules([TriggerRule(pattern="CASE")])
+    store.append("MLOG", "[ZCL] CASE session established")
+    window.tick()
+    window.apply_theme_change("light")
+    window.apply_theme_change("dark")
+    window.tick()
+    window._rec_shown = ("굳은 값", "paused")
+    window._trigger_shown = 999
+    window.apply_theme_change("light")
+    window.apply_theme_change("dark")
+    check("테마 전환이 tick 캐시를 비운다 (안 비우면 옛 색이 굳는다)",
+          window._rec_shown != ("굳은 값", "paused") and window._trigger_shown != 999,
+          f"{window._rec_shown} / {window._trigger_shown}")
+    check("트리거 칩 색도 테마를 따라온다",
+          theme_mod.WARNING in window.trigger_chip.styleSheet(),
+          window.trigger_chip.styleSheet()[:70])
+    window.trigger_watcher.set_rules([])
+    window.trigger_watcher.reset()
+    card = window.settings().connection_page.cards["MLOG"]
+    card.set_status("연결 실패", theme_mod.DANGER)
+    light_danger = theme_mod.PALETTES["light"]["DANGER"]
+    window.apply_theme_change("light")
+    card.set_status("연결 실패", light_danger)
+    window.apply_theme_change("dark")
+    check("연결 카드의 상태 문구 색도 테마를 따라온다",
+          theme_mod.DANGER in card.status.styleSheet(),
+          card.status.styleSheet()[:70])
+
+    pill = window.pills["MLOG"]
+    check("테마를 바꾸면 상태 필도 새 팔레트로 다시 칠해진다 (라이트에서 어두운 필이 남던 문제)",
+          theme_mod.pill_tint(theme_mod.state_color(pill.state())) in pill.styleSheet(),
+          pill.styleSheet()[:80])
     check("설정에 저장된다 (종료 후 다시 켜도 다크)", config_mod.theme() == "dark",
           config_mod.theme())
     check("전환 후에도 tick 이 예외 없이 돈다", window.tick() is None)
@@ -2024,15 +2068,38 @@ def test_theme() -> None:
         # ★QSS 에 밝은 색을 박아두면 다크에서 글씨가 안 보인다 (실사용 신고)
         theme_mod.set_theme("dark")
         dark_qss = theme_mod.build_qss()
-        leftovers = [c for c in ("#F7F8F9", "#F2F4F6", "#B0B8C1", "#C6D6F5",
-                                 "#E8F0FE", "#CFE3FF")
-                     if c in dark_qss]
-        check("다크 QSS 에 밝은 색이 박혀 있지 않다", not leftovers, str(leftovers))
+        # ★색 하나만 박혀 있어도 다크에서 흰 덩어리가 된다 (메뉴 hover 실사용 신고).
+        #   목록을 늘려가며 잡지 말고 "다크 QSS 의 모든 색은 다크 팔레트 값" 으로 잠근다.
+        allowed = set(theme_mod.PALETTES["dark"].values()) | {"#FFFFFF"}
+        leftovers = sorted({c.upper() for c in re.findall(r"#[0-9A-Fa-f]{6}", dark_qss)}
+                           - {c.upper() for c in allowed})
+        check("다크 QSS 의 색이 전부 다크 팔레트 값이다", not leftovers, str(leftovers))
         check("선택 색이 테마를 따른다",
               theme_mod.PALETTES["light"]["SELECTION_BG"]
               != theme_mod.PALETTES["dark"]["SELECTION_BG"])
         check("버튼 포커스 테두리 규칙이 있다 (포커스가 가면 안 보이던 문제)",
               "QPushButton:focus" in dark_qss)
+        # ★상태 필 글씨가 배경 틴트에 묻혀 안 읽혔다 (실사용 신고 — 라이트·다크 둘 다).
+        #   눈대중 대신 WCAG 대비비로 잠근다.
+        for name in ("light", "dark"):
+            theme_mod.set_theme(name)
+            for state in ("connected", "reconnecting", "disconnected"):
+                ratio = theme_mod.contrast_ratio(theme_mod.pill_text(state),
+                                                 theme_mod.pill_tint(theme_mod.state_color(state)))
+                check(f"{name} 상태 필 글씨 대비가 4.5 이상 ({state})", ratio >= 4.5, f"{ratio:.2f}")
+            tip = theme_mod.contrast_ratio(theme_mod.TOOLTIP_TEXT, theme_mod.TOOLTIP_BG)
+            check(f"{name} 툴팁 대비가 4.5 이상", tip >= 4.5, f"{tip:.2f}")
+        theme_mod.set_theme("dark")
+        # 인라인으로 발라 둔 옛 팔레트 색을 지금 테마의 같은 자리 색으로 옮긴다
+        check("retone 이 라이트 색을 다크 같은 자리로 옮긴다",
+              theme_mod.retone(theme_mod.PALETTES["light"]["WARNING"])
+              == theme_mod.PALETTES["dark"]["WARNING"])
+        check("팔레트에 없는 색은 그대로 둔다", theme_mod.retone("#123456") == "#123456")
+
+        # 안 쓰는 포트 카드도 팔레트를 따라야 한다 — 다크에서 흰 카드가 떴다
+        from .ui import connection_page as conn_mod
+        check("비활성 카드 색이 하드코딩이 아니다",
+              "#F7F8FA" not in io.open(conn_mod.__file__, encoding="utf-8").read())
 
         # ★기동 경로 회귀 가드 — app.py 는 theme.set_theme() 하나만 부른다.
         #   여기서 로그·하이라이트 팔레트가 같이 안 바뀌면 **다크로 켰을 때** 밝은

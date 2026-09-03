@@ -908,6 +908,9 @@ class MainWindow(QMainWindow):
             # 인라인으로 바르는 위젯만 다시 바르면 된다
             for widget in self.findChildren(theme.SegmentedTabs):
                 widget.refresh_theme()
+            # 상태 필은 값이 같으면 setStyleSheet 를 건너뛴다 — 그대로 두면 옛 테마 색이 남는다
+            for widget in self.findChildren(theme.StatusPill):
+                widget.refresh_theme()
             if self.settings_dialog is not None:
                 self.settings_dialog.refresh_theme()
             for pane in self._all_panes():
@@ -929,6 +932,10 @@ class MainWindow(QMainWindow):
                 theme.refresh_dock_buttons(dock)
                 if dock.isFloating():
                     theme.apply_titlebar(dock)
+            # ★값이 같으면 건너뛰는 갱신들 — 캐시를 비워야 다음 tick 이 새 색을 바른다
+            # ★값이 같으면 건너뛰는 갱신들 — 캐시를 비워야 다음 tick 이 새 색을 바른다
+            self._rec_shown = None
+            self._trigger_shown = None
             config_mod.set_theme_setting(applied)
             diag.info("app", f"테마 전환 -> {applied}")
         finally:

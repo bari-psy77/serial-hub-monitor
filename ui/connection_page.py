@@ -200,7 +200,8 @@ class PortCard(theme.Card):
                        self.connect_button, self.refresh_button, self.probe_button):
             widget.setEnabled(enabled)
         self.setStyleSheet("" if enabled else
-                           "QFrame#card { background: #F7F8FA; border-style: dashed; }")
+                           f"QFrame#card {{ background: {theme.DISABLED_BG};"
+                           " border-style: dashed; }")
 
     def _on_port_changed(self, _text: str) -> None:
         entry = self._entry()
@@ -273,6 +274,13 @@ class PortCard(theme.Card):
                 self._error_shown = True
             elif state == STATE_CONNECTED:
                 self.clear_error()   # 연결됐는데 옛 실패 문구가 남아 있으면 안 된다
+
+    def refresh_theme(self) -> None:
+        """테마 전환 — 인라인으로 바른 색들을 지금 팔레트로 옮긴다."""
+        self._apply_enabled_style(self.use_box.isChecked())
+        text, color = getattr(self, "_status_shown", None) or ("", theme.TEXT_SUB)
+        self._status_shown = None
+        self.set_status(text, theme.retone(color))
 
     def set_status(self, text: str, color: str = theme.TEXT_SUB) -> None:
         if (text, color) == getattr(self, "_status_shown", None):
@@ -470,6 +478,11 @@ class ConnectionPage(QWidget):
         self.log_naming_changed.emit()
 
     # ------------------------------------------------------------------ 프로파일
+
+    def refresh_theme(self) -> None:
+        """설정 창이 테마 전환을 알려 주면 카드들을 다시 칠한다."""
+        for card in self.cards.values():
+            card.refresh_theme()
 
     def refresh_profiles(self) -> None:
         pass   # 프로파일 UI 는 설정 > 프로파일 페이지가 담당한다
